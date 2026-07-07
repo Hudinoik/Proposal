@@ -2,17 +2,24 @@
 
 A tool for creating client **service agreements** for **TCO (The Contractors Office)**.
 It runs on your own computer, in your web browser. There is nothing to install, no
-account to create, and it works without an internet connection.
+account to create, and it works without an internet connection (the optional AI
+drafting feature is the only part that goes online).
 
 It comes pre-loaded with TCO's real setup:
 
 - **Your 4 services** — Bookkeeping, Accounts Payable & Payroll, Billing Administration,
-  and Reception & Outbound Calling — each with its standard agreement wording.
+  and Reception & Outbound Calling — each with its standard agreement wording, plus an
+  **Other / Custom** option for anything else.
+- **Combined agreements** — tick any two (or more) services to generate one combined
+  agreement (e.g. Bookkeeping + Accounts Payable & Payroll) with the wording, fees, and
+  packages of both merged properly.
 - **Your packages & prices** — all 5 Bookkeeping packages ($500–$7,000) and all
   3 Reception packages ($500–$3,500), with each package's own add-on prices.
 - **Your legal clauses** — Confidentiality, Limitation of Liability, Hold Harmless &
   Indemnification, Term & Termination, and Annual Pricing Review.
 - **Your branding** — the TCO logo and colours are built in.
+- **AI drafting from meeting notes** — paste notes or a client's email and Claude fills
+  in the whole agreement for you to review (see below).
 
 ---
 
@@ -36,9 +43,35 @@ attorney review and approve every clause**, then paste the approved wording into
 
 ---
 
+## Drafting from meeting notes (AI)
+
+At the top of the New Agreement page there's a **"Draft from meeting notes"** box.
+Paste your meeting notes or a client's email (or upload a .txt file), and Claude reads
+them and fills in the whole agreement — services, client details, package, add-ons,
+fees, and client-specific scope points. **Always review before sending.**
+
+Two ways to connect it to Claude:
+
+1. **Your claude.ai subscription (recommended — costs nothing extra).**
+   A claude.ai subscription can't be plugged into other apps directly, so the app does
+   the next best thing: click **"Copy prompt for claude.ai"**, paste it into a chat at
+   [claude.ai](https://claude.ai), then copy Claude's reply and paste it into the
+   **"Paste Claude's reply"** box → **Apply**. Everything fills in automatically.
+2. **One-click with an API key.** Paste an Anthropic **API key** into
+   *Settings → AI assistant* and the **"Draft with Claude"** button talks to Claude
+   directly. An API key is separate from a claude.ai subscription — create one at
+   [console.anthropic.com](https://console.anthropic.com) (pay-per-use; a typical
+   draft costs a few cents). The key is stored only in your browser.
+
+Privacy note: with either method, the notes you paste are sent to Anthropic (Claude)
+to be read — don't include anything you wouldn't put in a Claude chat.
+
+---
+
 ## Making an agreement (the everyday steps)
 
-1. **Choose the service** (Bookkeeping, AP & Payroll, Billing Admin, or Reception).
+1. **Choose the service** — or tick several for a **combined agreement** (e.g.
+   Bookkeeping + Accounts Payable & Payroll). Use **Other / Custom** for anything else.
    The standard wording and default fees load automatically.
 2. Fill in the **client details** (business name, representative, effective date).
 3. Build the **fees**:
