@@ -1,0 +1,817 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TCO Proposal Generator</title>
+<style>
+  /* ---------- Brand colours (change these in Settings) ---------- */
+  :root{
+    --primary:#0B5FFF;      /* main brand colour */
+    --accent:#0A2540;       /* dark heading colour */
+    --ink:#1c2430;          /* body text */
+    --muted:#6b7684;        /* secondary text */
+    --border:#e3e7ee;       /* lines & borders */
+    --bg:#eef1f6;           /* app background */
+    --panel:#ffffff;        /* panels/cards */
+    --ok:#0a7d3c;
+    --warnbg:#fff7e6;
+    --warnbd:#f2c94c;
+  }
+
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    color:var(--ink);
+    background:var(--bg);
+    display:flex;flex-direction:column;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  /* ---------- Top bar ---------- */
+  .app-header{
+    display:flex;align-items:center;gap:16px;
+    padding:10px 18px;background:var(--accent);color:#fff;
+    position:sticky;top:0;z-index:5;flex-wrap:wrap;
+  }
+  .app-header .brand{font-weight:700;letter-spacing:.2px;display:flex;align-items:center;gap:10px}
+  .app-header .brand .dot{width:10px;height:10px;border-radius:50%;background:var(--primary)}
+  .tabs{display:flex;gap:6px;margin-left:8px}
+  .tabs button{
+    background:transparent;border:1px solid transparent;color:#cbd6e6;
+    padding:7px 14px;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;
+  }
+  .tabs button.active{background:rgba(255,255,255,.12);color:#fff}
+  .tabs button:hover{color:#fff}
+  .app-header .spacer{flex:1}
+  .btn{
+    border:1px solid var(--border);background:#fff;color:var(--ink);
+    padding:9px 14px;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;
+  }
+  .btn:hover{border-color:var(--primary)}
+  .btn-primary{background:var(--primary);border-color:var(--primary);color:#fff}
+  .btn-primary:hover{filter:brightness(1.05)}
+  .btn-sm{padding:6px 10px;font-size:13px}
+  .btn-ghost{background:transparent;border-color:rgba(255,255,255,.3);color:#fff}
+  .btn-ghost:hover{background:rgba(255,255,255,.12)}
+  .btn-danger{color:#b42318;border-color:#f0c2bd;background:#fff}
+  .btn-danger:hover{background:#fdecea;border-color:#b42318}
+
+  /* ---------- Layout ---------- */
+  .layout{display:flex;flex:1;min-height:0}
+  .editor-pane{
+    width:460px;min-width:360px;max-width:520px;
+    overflow-y:auto;padding:20px 20px 60px;background:var(--panel);
+    border-right:1px solid var(--border);
+  }
+  .preview-pane{
+    flex:1;overflow-y:auto;padding:28px;display:flex;justify-content:center;align-items:flex-start;
+  }
+
+  /* ---------- Forms ---------- */
+  h2.section-title{font-size:15px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin:26px 0 12px}
+  h2.section-title:first-child{margin-top:4px}
+  .field{margin-bottom:12px}
+  .field label{display:block;font-size:13px;font-weight:600;margin-bottom:5px;color:var(--accent)}
+  .field .hint{font-weight:400;color:var(--muted)}
+  input[type=text],input[type=email],input[type=tel],input[type=date],input[type=number],select,textarea{
+    width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-size:14px;
+    font-family:inherit;color:var(--ink);background:#fff;
+  }
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(11,95,255,.12)}
+  textarea{min-height:80px;resize:vertical;line-height:1.45}
+  .row{display:flex;gap:10px}
+  .row>.field{flex:1}
+  input[type=color]{width:46px;height:38px;padding:2px;border-radius:8px;border:1px solid var(--border);cursor:pointer;vertical-align:middle}
+
+  .card{border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:12px;background:#fff}
+  .card .card-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px}
+  .card .card-head strong{font-size:14px}
+
+  .disclaimer{
+    background:var(--warnbg);border:1px solid var(--warnbd);border-radius:10px;
+    padding:12px 14px;font-size:13px;line-height:1.5;margin-bottom:14px;color:#5c4400;
+  }
+  .disclaimer b{color:#7a4b00}
+  .help{font-size:12.5px;color:var(--muted);line-height:1.5;margin:6px 0 0}
+  .logo-preview{max-height:56px;max-width:200px;margin-top:8px;display:block;border:1px solid var(--border);border-radius:6px;padding:4px;background:#fff}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+  .inline-note{font-size:12.5px;color:var(--ok);margin-left:8px}
+
+  /* ================= The proposal document ================= */
+  .doc{
+    width:820px;max-width:100%;background:#fff;color:var(--ink);
+    padding:56px 60px;border-radius:6px;box-shadow:0 6px 30px rgba(16,32,64,.10);
+    line-height:1.55;font-size:14.5px;
+  }
+  .doc-head{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;border-bottom:3px solid var(--primary);padding-bottom:18px}
+  .doc-logo img{max-height:64px;max-width:240px}
+  .doc-wordmark{font-size:22px;font-weight:800;color:var(--accent)}
+  .doc-wordmark small{display:block;font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.5px}
+  .doc-meta{text-align:right;font-size:12.5px;color:var(--muted)}
+  .doc-meta b{color:var(--accent)}
+  .doc-title{font-size:26px;font-weight:800;color:var(--accent);margin:26px 0 4px}
+  .doc-subtitle{color:var(--muted);margin-bottom:22px}
+  .doc-parties{display:flex;gap:24px;flex-wrap:wrap;margin-bottom:8px}
+  .doc-parties .party{flex:1;min-width:220px;border:1px solid var(--border);border-radius:8px;padding:12px 14px;background:#fafbfe}
+  .doc-parties .party h4{margin:0 0 6px;font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--primary)}
+  .doc-parties .party .line{font-size:13.5px}
+  .doc-parties .party .big{font-weight:700;color:var(--accent);font-size:15px}
+
+  .doc-section{margin-top:26px}
+  .doc-section h3{font-size:16px;color:var(--accent);border-bottom:1px solid var(--border);padding-bottom:6px;margin:0 0 10px}
+  .doc-section p{margin:0 0 10px}
+
+  table.kv{width:100%;border-collapse:collapse}
+  table.kv td{padding:7px 4px;border-bottom:1px solid var(--border);font-size:13.5px;vertical-align:top}
+  table.kv td.k{color:var(--muted);width:38%}
+  table.kv td.v{color:var(--ink);font-weight:600}
+
+  .pkg-box{border:1px solid var(--border);border-radius:10px;overflow:hidden}
+  .pkg-box .pkg-top{display:flex;justify-content:space-between;align-items:center;gap:16px;background:var(--accent);color:#fff;padding:14px 18px}
+  .pkg-box .pkg-top .name{font-size:18px;font-weight:800}
+  .pkg-box .pkg-top .price{text-align:right}
+  .pkg-box .pkg-top .price .amt{font-size:22px;font-weight:800}
+  .pkg-box .pkg-top .price .note{font-size:12px;opacity:.85}
+  .pkg-box .pkg-body{padding:16px 18px}
+  .pkg-box .pkg-body .desc{color:var(--muted);margin-bottom:10px}
+  ul.svc{list-style:none;margin:0;padding:0}
+  ul.svc li{padding:5px 0 5px 26px;position:relative;font-size:13.8px;border-bottom:1px dashed var(--border)}
+  ul.svc li:last-child{border-bottom:none}
+  ul.svc li:before{content:"✓";position:absolute;left:2px;color:var(--ok);font-weight:800}
+
+  .clause{margin-bottom:14px}
+  .clause h4{margin:0 0 4px;font-size:14.5px;color:var(--accent)}
+  .clause p{margin:0 0 8px;font-size:13.5px;color:#2a3340}
+
+  .signatures{margin-top:12px}
+  .sign-row{display:flex;gap:40px;margin-top:34px;flex-wrap:wrap}
+  .sign-block{flex:1;min-width:230px}
+  .sign-line{border-top:1.5px solid var(--accent);padding-top:6px;font-size:12.5px;color:var(--muted)}
+  .sign-block .who{font-weight:700;color:var(--accent);margin-bottom:36px;font-size:13.5px}
+
+  .doc-foot{margin-top:34px;border-top:1px solid var(--border);padding-top:14px;font-size:12px;color:var(--muted);text-align:center}
+
+  .empty-hint{color:var(--muted);font-style:italic}
+
+  /* ================= Print / Save as PDF ================= */
+  @page{size:letter;margin:16mm}
+  @media print{
+    body{background:#fff}
+    .app-header,.editor-pane,.no-print{display:none !important}
+    .layout{display:block}
+    .preview-pane{display:block;overflow:visible;padding:0}
+    .doc{box-shadow:none;border-radius:0;width:auto;max-width:none;margin:0;padding:0}
+    .doc-section,.clause,.pkg-box{page-break-inside:avoid}
+    .signatures{page-break-inside:avoid}
+    .doc-section h3{page-break-after:avoid}
+  }
+</style>
+</head>
+<body>
+
+<header class="app-header no-print">
+  <div class="brand"><span class="dot"></span> TCO Proposal Generator</div>
+  <nav class="tabs">
+    <button data-tab="proposal" class="active">New Proposal</button>
+    <button data-tab="settings">Settings</button>
+  </nav>
+  <div class="spacer"></div>
+  <button class="btn btn-ghost btn-sm" id="btnNew" title="Clear the form and start a new proposal">＋ New</button>
+  <button class="btn btn-primary" id="btnPrint">💾 Save as PDF</button>
+</header>
+
+<main class="layout">
+  <!-- ============ LEFT: editor ============ -->
+  <section class="editor-pane no-print">
+
+    <!-- ---------- Proposal tab ---------- -->
+    <div id="tab-proposal">
+      <h2 class="section-title">Proposal details</h2>
+      <div class="row">
+        <div class="field">
+          <label>Proposal number</label>
+          <input type="text" id="p_number" placeholder="TCO-2026-0001">
+        </div>
+        <div class="field">
+          <label>Date</label>
+          <input type="date" id="p_date">
+        </div>
+      </div>
+      <div class="field">
+        <label>Valid until <span class="hint">(optional)</span></label>
+        <input type="date" id="p_valid">
+      </div>
+
+      <h2 class="section-title">Client details</h2>
+      <div class="field">
+        <label>Business name</label>
+        <input type="text" id="c_business" placeholder="e.g. Smith Plumbing LLC">
+      </div>
+      <div class="field">
+        <label>Contact person</label>
+        <input type="text" id="c_contact" placeholder="e.g. John Smith">
+      </div>
+      <div class="row">
+        <div class="field">
+          <label>Email</label>
+          <input type="email" id="c_email" placeholder="john@example.com">
+        </div>
+        <div class="field">
+          <label>Phone</label>
+          <input type="tel" id="c_phone" placeholder="(555) 123-4567">
+        </div>
+      </div>
+      <div class="field">
+        <label>Address <span class="hint">(optional)</span></label>
+        <textarea id="c_address" placeholder="Street, City, State ZIP"></textarea>
+      </div>
+
+      <h2 class="section-title">Package</h2>
+      <div class="field">
+        <label>Choose a package</label>
+        <select id="p_package"></select>
+      </div>
+      <div class="field">
+        <label>Personal note to the client <span class="hint">(optional)</span></label>
+        <textarea id="p_note" placeholder="A short, friendly line that appears under the welcome message."></textarea>
+      </div>
+
+      <div class="toolbar">
+        <button class="btn btn-primary" id="btnPrint2">💾 Save as PDF</button>
+        <span class="help" style="margin:0;align-self:center">Tip: in the print box, choose “Save as PDF” as the destination.</span>
+      </div>
+    </div>
+
+    <!-- ---------- Settings tab ---------- -->
+    <div id="tab-settings" hidden>
+
+      <h2 class="section-title">Your company &amp; branding</h2>
+      <div class="field">
+        <label>Company name</label>
+        <input type="text" id="s_name">
+      </div>
+      <div class="field">
+        <label>Tagline <span class="hint">(optional)</span></label>
+        <input type="text" id="s_tagline">
+      </div>
+      <div class="row">
+        <div class="field">
+          <label>Email</label>
+          <input type="text" id="s_email">
+        </div>
+        <div class="field">
+          <label>Phone</label>
+          <input type="text" id="s_phone">
+        </div>
+      </div>
+      <div class="field">
+        <label>Website <span class="hint">(optional)</span></label>
+        <input type="text" id="s_website">
+      </div>
+      <div class="field">
+        <label>Address</label>
+        <textarea id="s_address"></textarea>
+      </div>
+      <div class="field">
+        <label>Prepared by <span class="hint">(your name / title)</span></label>
+        <input type="text" id="s_preparedBy">
+      </div>
+
+      <div class="row">
+        <div class="field">
+          <label>Main colour</label>
+          <input type="color" id="s_primary"> <span id="s_primary_hex" class="help" style="display:inline"></span>
+        </div>
+        <div class="field">
+          <label>Heading colour</label>
+          <input type="color" id="s_accent"> <span id="s_accent_hex" class="help" style="display:inline"></span>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Logo</label>
+        <input type="file" id="s_logo" accept="image/*">
+        <img id="s_logo_preview" class="logo-preview" alt="" hidden>
+        <div class="toolbar">
+          <button class="btn btn-sm btn-danger" id="btnRemoveLogo" hidden>Remove logo</button>
+        </div>
+        <p class="help">If no logo is set, your company name is shown as text instead.</p>
+      </div>
+
+      <h2 class="section-title">Packages</h2>
+      <p class="help" style="margin-bottom:10px">Add, edit, or remove your pricing packages. Put one included service per line.</p>
+      <div id="pkgEditor"></div>
+      <button class="btn btn-sm" id="btnAddPkg">＋ Add package</button>
+
+      <h2 class="section-title">Intro &amp; About</h2>
+      <div class="field"><label>Welcome heading</label><input type="text" id="t_welcomeTitle"></div>
+      <div class="field"><label>Welcome message</label><textarea id="t_welcomeBody"></textarea></div>
+      <div class="field"><label>About heading</label><input type="text" id="t_aboutTitle"></div>
+      <div class="field"><label>About text</label><textarea id="t_aboutBody"></textarea></div>
+      <div class="field"><label>Pricing &amp; payment heading</label><input type="text" id="t_pricingTitle"></div>
+      <div class="field"><label>Pricing &amp; payment text</label><textarea id="t_pricingBody"></textarea></div>
+
+      <h2 class="section-title">Legal clauses</h2>
+      <div class="disclaimer">
+        <b>⚠ Please read.</b> The clauses below are <b>example wording only and are NOT legal advice</b>.
+        Have a qualified attorney review and approve every clause before you send a proposal to a client.
+        Edit each box to match your lawyer-approved wording.
+      </div>
+      <div id="clauseEditor"></div>
+      <button class="btn btn-sm" id="btnAddClause">＋ Add clause</button>
+
+      <div class="field" style="margin-top:16px">
+        <label>Acceptance heading</label><input type="text" id="t_acceptTitle">
+      </div>
+      <div class="field">
+        <label>Acceptance statement</label><textarea id="t_acceptBody"></textarea>
+      </div>
+
+      <h2 class="section-title">Backup &amp; restore</h2>
+      <p class="help" style="margin-bottom:10px">Your settings are saved on this computer. Download a backup file so you never lose your packages and clauses (and to move to another computer).</p>
+      <div class="toolbar">
+        <button class="btn btn-sm" id="btnExport">⬇ Download backup</button>
+        <label class="btn btn-sm" style="margin:0">⬆ Restore from file
+          <input type="file" id="importFile" accept="application/json,.json" hidden>
+        </label>
+        <button class="btn btn-sm btn-danger" id="btnReset">Reset to example defaults</button>
+      </div>
+      <p class="help" id="saveStatus"></p>
+    </div>
+
+  </section>
+
+  <!-- ============ RIGHT: live preview ============ -->
+  <section class="preview-pane">
+    <div id="preview" class="doc"></div>
+  </section>
+</main>
+
+<script>
+"use strict";
+/* =========================================================================
+   TCO Proposal Generator — all logic in one place.
+   No internet, no accounts. Everything is saved in this browser (localStorage)
+   plus the backup file you can download from Settings.
+   ========================================================================= */
+
+var STORE_SETTINGS = "tco_settings_v1";
+var STORE_DRAFT    = "tco_draft_v1";
+
+/* ---------- Example / default content (you can change all of this in Settings) ---------- */
+function defaultSettings(){
+  return {
+    company:{
+      name:"The Contractors Office Inc",
+      tagline:"Back-office support for the trades",
+      email:"hello@thecontractorsoffice.com",
+      phone:"(555) 000-0000",
+      website:"www.thecontractorsoffice.com",
+      address:"123 Main Street, Suite 100\nYour City, ST 00000",
+      preparedBy:"Yehuda — Onboarding Specialist",
+      logo:"",
+      primary:"#0B5FFF",
+      accent:"#0A2540"
+    },
+    packages:[
+      {name:"Starter", price:"$299", priceNote:"per month",
+       desc:"Everything a new contractor needs to get the business side organised.",
+       services:["Monthly bookkeeping","Bank & card reconciliation","Quarterly check-in call","Email support"]},
+      {name:"Professional", price:"$549", priceNote:"per month",
+       desc:"For established contractors who want payroll and tax handled too.",
+       services:["Everything in Starter","Payroll processing (up to 5 staff)","Sales tax filing","Monthly financial reports","Priority email & phone support"]},
+      {name:"Premium", price:"$899", priceNote:"per month",
+       desc:"Full back-office partnership with proactive advice.",
+       services:["Everything in Professional","Payroll for unlimited staff","Dedicated account manager","Quarterly business review","Cash-flow forecasting"]}
+    ],
+    text:{
+      welcomeTitle:"Welcome",
+      welcomeBody:"Thank you for considering The Contractors Office Inc. We are excited about the opportunity to support your business. This proposal outlines the services we recommend, the investment involved, and the terms of our engagement. We look forward to working with you.",
+      aboutTitle:"About The Contractors Office",
+      aboutBody:"The Contractors Office Inc (TCO) specialises in helping contractors run the business side of their trade — so they can focus on the work they do best. From onboarding through day-to-day support, our team provides reliable, professional back-office services tailored to the trades.",
+      pricingTitle:"Pricing & Payment Terms",
+      pricingBody:"The fee below reflects the selected package. Unless otherwise agreed in writing, fees are billed monthly and are due within fifteen (15) days of the invoice date. All prices are exclusive of applicable taxes.",
+      clauses:[
+        {title:"Limitation of Liability",
+         body:"To the maximum extent permitted by law, the total liability of The Contractors Office Inc arising out of or related to this agreement, whether in contract, tort, or otherwise, shall not exceed the total fees paid by the Client to TCO during the three (3) months immediately preceding the event giving rise to the claim. In no event shall TCO be liable for any indirect, incidental, special, consequential, or punitive damages, including loss of profits, revenue, or data, even if advised of the possibility of such damages."},
+        {title:"Hold Harmless & Indemnification",
+         body:"The Client agrees to indemnify, defend, and hold harmless The Contractors Office Inc, its officers, employees, and agents from and against any and all claims, damages, losses, liabilities, and expenses (including reasonable attorneys' fees) arising out of or resulting from the Client's use of the services, breach of this agreement, or violation of any applicable law or the rights of any third party."},
+        {title:"Annual Pricing Review",
+         body:"TCO reviews its pricing on an annual basis. Fees for the services described in this proposal are guaranteed for the initial twelve (12) month term. Thereafter, TCO may adjust fees upon at least thirty (30) days' written notice to the Client. Continued use of the services after the effective date of any adjustment constitutes acceptance of the revised fees."},
+        {title:"Term & Termination",
+         body:"This agreement begins on the acceptance date and continues on a month-to-month basis until terminated. Either party may terminate this agreement upon thirty (30) days' prior written notice. Upon termination, the Client remains responsible for all fees incurred through the effective date of termination, and any outstanding balance becomes immediately due and payable."}
+      ],
+      acceptTitle:"Acceptance",
+      acceptBody:"By signing below, the Client acknowledges that they have read, understood, and agree to the services, pricing, and terms set out in this proposal."
+    }
+  };
+}
+
+/* ---------- tiny helpers ---------- */
+function $(id){return document.getElementById(id);}
+function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];});}
+function paras(text){
+  var t=String(text==null?"":text).trim();
+  if(!t) return "";
+  return t.split(/\n\s*\n/).map(function(block){
+    return "<p>"+esc(block).replace(/\n/g,"<br>")+"</p>";
+  }).join("");
+}
+function todayISO(){
+  var d=new Date(), m=("0"+(d.getMonth()+1)).slice(-2), day=("0"+d.getDate()).slice(-2);
+  return d.getFullYear()+"-"+m+"-"+day;
+}
+function prettyDate(iso){
+  if(!iso) return "";
+  var p=iso.split("-"); if(p.length!==3) return iso;
+  var months=["January","February","March","April","May","June","July","August","September","October","November","December"];
+  return months[parseInt(p[1],10)-1]+" "+parseInt(p[2],10)+", "+p[0];
+}
+
+/* ---------- load / save ---------- */
+var settings, draft;
+function loadSettings(){
+  try{
+    var raw=localStorage.getItem(STORE_SETTINGS);
+    if(raw){ settings=mergeDefaults(JSON.parse(raw)); return; }
+  }catch(e){}
+  settings=defaultSettings();
+}
+/* keep older backups working if we add fields later */
+function mergeDefaults(s){
+  var d=defaultSettings();
+  s=s||{};
+  s.company=Object.assign({},d.company,s.company||{});
+  s.packages=Array.isArray(s.packages)?s.packages:d.packages;
+  s.text=Object.assign({},d.text,s.text||{});
+  if(!Array.isArray(s.text.clauses)) s.text.clauses=d.text.clauses;
+  return s;
+}
+function saveSettings(){
+  try{ localStorage.setItem(STORE_SETTINGS,JSON.stringify(settings)); flashSaved(); }
+  catch(e){ setStatus("Could not save on this computer — please download a backup instead.",true); }
+}
+function loadDraft(){
+  try{ var raw=localStorage.getItem(STORE_DRAFT); if(raw){ draft=JSON.parse(raw); return; } }catch(e){}
+  draft=null;
+}
+function saveDraft(){ try{ localStorage.setItem(STORE_DRAFT,JSON.stringify(draft)); }catch(e){} }
+
+var statusTimer=null;
+function setStatus(msg,isError){
+  var el=$("saveStatus"); if(!el) return;
+  el.textContent=msg||""; el.style.color=isError?"#b42318":"var(--ok)";
+}
+function flashSaved(){
+  setStatus("✓ Saved on this computer",false);
+  if(statusTimer) clearTimeout(statusTimer);
+  statusTimer=setTimeout(function(){ setStatus(""); },1500);
+}
+
+/* ---------- apply brand colours ---------- */
+function applyBrand(){
+  document.documentElement.style.setProperty("--primary",settings.company.primary||"#0B5FFF");
+  document.documentElement.style.setProperty("--accent",settings.company.accent||"#0A2540");
+}
+
+/* =========================================================================
+   PROPOSAL TAB
+   ========================================================================= */
+function readDraftFromForm(){
+  draft={
+    number:$("p_number").value,
+    date:$("p_date").value,
+    valid:$("p_valid").value,
+    business:$("c_business").value,
+    contact:$("c_contact").value,
+    email:$("c_email").value,
+    phone:$("c_phone").value,
+    address:$("c_address").value,
+    note:$("p_note").value,
+    packageIndex:parseInt($("p_package").value,10)||0
+  };
+}
+function fillProposalForm(){
+  var d=draft||{};
+  $("p_number").value = d.number || suggestNumber();
+  $("p_date").value   = d.date   || todayISO();
+  $("p_valid").value  = d.valid  || "";
+  $("c_business").value=d.business||"";
+  $("c_contact").value =d.contact||"";
+  $("c_email").value   =d.email||"";
+  $("c_phone").value   =d.phone||"";
+  $("c_address").value =d.address||"";
+  $("p_note").value    =d.note||"";
+  rebuildPackageOptions(d.packageIndex||0);
+}
+function suggestNumber(){
+  var year=new Date().getFullYear();
+  return "TCO-"+year+"-0001";
+}
+function rebuildPackageOptions(selected){
+  var sel=$("p_package"); sel.innerHTML="";
+  settings.packages.forEach(function(p,i){
+    var o=document.createElement("option");
+    o.value=i; o.textContent=p.name+(p.price?("  —  "+p.price+(p.priceNote?(" "+p.priceNote):"")):"");
+    sel.appendChild(o);
+  });
+  if(selected>=settings.packages.length) selected=0;
+  sel.value=selected||0;
+}
+
+/* =========================================================================
+   PREVIEW (this is what prints to PDF)
+   ========================================================================= */
+function renderPreview(){
+  var c=settings.company, t=settings.text, d=draft||{};
+  var pkg=settings.packages[(d.packageIndex||0)] || settings.packages[0] || null;
+
+  var logoHtml = c.logo
+    ? '<div class="doc-logo"><img src="'+esc(c.logo)+'" alt="logo"></div>'
+    : '<div class="doc-wordmark">'+esc(c.name||"Your Company")+(c.tagline?('<small>'+esc(c.tagline)+'</small>'):'')+'</div>';
+
+  var metaHtml =
+    '<div class="doc-meta">'+
+      (d.number?('<div><b>Proposal</b> '+esc(d.number)+'</div>'):'')+
+      (d.date?('<div><b>Date</b> '+esc(prettyDate(d.date))+'</div>'):'')+
+      (d.valid?('<div><b>Valid until</b> '+esc(prettyDate(d.valid))+'</div>'):'')+
+    '</div>';
+
+  var clientLines=[];
+  if(d.business) clientLines.push('<div class="line big">'+esc(d.business)+'</div>');
+  if(d.contact)  clientLines.push('<div class="line">'+esc(d.contact)+'</div>');
+  if(d.email)    clientLines.push('<div class="line">'+esc(d.email)+'</div>');
+  if(d.phone)    clientLines.push('<div class="line">'+esc(d.phone)+'</div>');
+  if(d.address)  clientLines.push('<div class="line">'+esc(d.address).replace(/\n/g,"<br>")+'</div>');
+  if(!clientLines.length) clientLines.push('<div class="line empty-hint">Client details will appear here.</div>');
+
+  var byLines=[];
+  byLines.push('<div class="line big">'+esc(c.name||"")+'</div>');
+  if(c.preparedBy) byLines.push('<div class="line">'+esc(c.preparedBy)+'</div>');
+  if(c.email) byLines.push('<div class="line">'+esc(c.email)+'</div>');
+  if(c.phone) byLines.push('<div class="line">'+esc(c.phone)+'</div>');
+
+  var pkgHtml='';
+  if(pkg){
+    var svc=(pkg.services||[]).filter(function(s){return String(s).trim()!=="";})
+      .map(function(s){return '<li>'+esc(s)+'</li>';}).join("");
+    pkgHtml=
+      '<div class="pkg-box">'+
+        '<div class="pkg-top">'+
+          '<div class="name">'+esc(pkg.name||"")+'</div>'+
+          '<div class="price"><div class="amt">'+esc(pkg.price||"")+'</div>'+(pkg.priceNote?('<div class="note">'+esc(pkg.priceNote)+'</div>'):'')+'</div>'+
+        '</div>'+
+        '<div class="pkg-body">'+
+          (pkg.desc?('<div class="desc">'+esc(pkg.desc)+'</div>'):'')+
+          (svc?('<ul class="svc">'+svc+'</ul>'):'')+
+        '</div>'+
+      '</div>';
+  }
+
+  var clausesHtml=(t.clauses||[]).map(function(cl){
+    return '<div class="clause"><h4>'+esc(cl.title)+'</h4>'+paras(cl.body)+'</div>';
+  }).join("");
+
+  var note = d.note ? '<p>'+esc(d.note).replace(/\n/g,"<br>")+'</p>' : '';
+
+  var footBits=[c.name,c.address?String(c.address).replace(/\n/g," · "):"",c.phone,c.email,c.website].filter(Boolean).map(esc);
+
+  $("preview").innerHTML =
+    '<div class="doc-head">'+logoHtml+metaHtml+'</div>'+
+    '<div class="doc-title">Services Proposal</div>'+
+    '<div class="doc-subtitle">Prepared especially for '+(d.business?esc(d.business):"your business")+'.</div>'+
+
+    '<div class="doc-parties">'+
+      '<div class="party"><h4>Prepared for</h4>'+clientLines.join("")+'</div>'+
+      '<div class="party"><h4>Prepared by</h4>'+byLines.join("")+'</div>'+
+    '</div>'+
+
+    '<div class="doc-section"><h3>'+esc(t.welcomeTitle)+'</h3>'+paras(t.welcomeBody)+note+'</div>'+
+    '<div class="doc-section"><h3>'+esc(t.aboutTitle)+'</h3>'+paras(t.aboutBody)+'</div>'+
+
+    '<div class="doc-section"><h3>Recommended Package</h3>'+(pkgHtml||'<p class="empty-hint">Choose a package to see it here.</p>')+'</div>'+
+
+    '<div class="doc-section"><h3>'+esc(t.pricingTitle)+'</h3>'+paras(t.pricingBody)+'</div>'+
+
+    '<div class="doc-section"><h3>Terms &amp; Conditions</h3>'+clausesHtml+'</div>'+
+
+    '<div class="doc-section signatures"><h3>'+esc(t.acceptTitle)+'</h3>'+paras(t.acceptBody)+
+      '<div class="sign-row">'+
+        '<div class="sign-block"><div class="who">Client</div><div class="sign-line">Signature &amp; date</div></div>'+
+        '<div class="sign-block"><div class="who">'+esc(c.name||"The Contractors Office Inc")+'</div><div class="sign-line">Signature &amp; date</div></div>'+
+      '</div>'+
+    '</div>'+
+
+    '<div class="doc-foot">'+footBits.join(" &nbsp;•&nbsp; ")+'</div>';
+}
+
+/* =========================================================================
+   SETTINGS TAB
+   ========================================================================= */
+function fillSettingsForm(){
+  var c=settings.company,t=settings.text;
+  $("s_name").value=c.name||""; $("s_tagline").value=c.tagline||"";
+  $("s_email").value=c.email||""; $("s_phone").value=c.phone||"";
+  $("s_website").value=c.website||""; $("s_address").value=c.address||"";
+  $("s_preparedBy").value=c.preparedBy||"";
+  $("s_primary").value=c.primary||"#0B5FFF"; $("s_primary_hex").textContent=c.primary||"";
+  $("s_accent").value=c.accent||"#0A2540"; $("s_accent_hex").textContent=c.accent||"";
+  updateLogoPreview();
+
+  $("t_welcomeTitle").value=t.welcomeTitle||""; $("t_welcomeBody").value=t.welcomeBody||"";
+  $("t_aboutTitle").value=t.aboutTitle||""; $("t_aboutBody").value=t.aboutBody||"";
+  $("t_pricingTitle").value=t.pricingTitle||""; $("t_pricingBody").value=t.pricingBody||"";
+  $("t_acceptTitle").value=t.acceptTitle||""; $("t_acceptBody").value=t.acceptBody||"";
+
+  renderPkgEditor();
+  renderClauseEditor();
+}
+function updateLogoPreview(){
+  var img=$("s_logo_preview"), btn=$("btnRemoveLogo");
+  if(settings.company.logo){ img.src=settings.company.logo; img.hidden=false; btn.hidden=false; }
+  else{ img.hidden=true; btn.hidden=true; }
+}
+function renderPkgEditor(){
+  var wrap=$("pkgEditor"); wrap.innerHTML="";
+  settings.packages.forEach(function(p,i){
+    var card=document.createElement("div"); card.className="card";
+    card.innerHTML=
+      '<div class="card-head"><strong>Package '+(i+1)+'</strong>'+
+        '<button class="btn btn-sm btn-danger" data-del="'+i+'">Remove</button></div>'+
+      '<div class="row">'+
+        '<div class="field"><label>Name</label><input type="text" data-f="name" data-i="'+i+'" value="'+esc(p.name)+'"></div>'+
+        '<div class="field"><label>Price</label><input type="text" data-f="price" data-i="'+i+'" value="'+esc(p.price)+'"></div>'+
+      '</div>'+
+      '<div class="field"><label>Price note <span class="hint">(e.g. per month)</span></label><input type="text" data-f="priceNote" data-i="'+i+'" value="'+esc(p.priceNote)+'"></div>'+
+      '<div class="field"><label>Short description</label><input type="text" data-f="desc" data-i="'+i+'" value="'+esc(p.desc)+'"></div>'+
+      '<div class="field"><label>Included services <span class="hint">(one per line)</span></label>'+
+        '<textarea data-f="services" data-i="'+i+'">'+esc((p.services||[]).join("\n"))+'</textarea></div>';
+    wrap.appendChild(card);
+  });
+}
+function renderClauseEditor(){
+  var wrap=$("clauseEditor"); wrap.innerHTML="";
+  (settings.text.clauses||[]).forEach(function(cl,i){
+    var card=document.createElement("div"); card.className="card";
+    card.innerHTML=
+      '<div class="card-head"><strong>Clause '+(i+1)+'</strong>'+
+        '<button class="btn btn-sm btn-danger" data-delc="'+i+'">Remove</button></div>'+
+      '<div class="field"><label>Title</label><input type="text" data-cf="title" data-i="'+i+'" value="'+esc(cl.title)+'"></div>'+
+      '<div class="field"><label>Wording</label><textarea data-cf="body" data-i="'+i+'">'+esc(cl.body)+'</textarea></div>';
+    wrap.appendChild(card);
+  });
+}
+
+/* =========================================================================
+   Save as PDF
+   ========================================================================= */
+function doPrint(){
+  readDraftFromForm(); saveDraft(); renderPreview();
+  window.print();
+}
+
+/* =========================================================================
+   Backup / restore
+   ========================================================================= */
+function exportBackup(){
+  var data=JSON.stringify(settings,null,2);
+  var blob=new Blob([data],{type:"application/json"});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement("a");
+  a.href=url; a.download="tco-proposal-settings-backup.json";
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  setStatus("✓ Backup downloaded",false);
+}
+function importBackup(file){
+  var reader=new FileReader();
+  reader.onload=function(){
+    try{
+      var obj=JSON.parse(reader.result);
+      settings=mergeDefaults(obj);
+      saveSettings(); applyBrand();
+      fillSettingsForm(); rebuildPackageOptions(draft?draft.packageIndex:0); renderPreview();
+      setStatus("✓ Settings restored from file",false);
+    }catch(e){ setStatus("That file could not be read. Please choose a valid backup file.",true); }
+  };
+  reader.readAsText(file);
+}
+
+/* =========================================================================
+   Wire everything up
+   ========================================================================= */
+function switchTab(name){
+  document.querySelectorAll(".tabs button").forEach(function(b){ b.classList.toggle("active",b.dataset.tab===name); });
+  $("tab-proposal").hidden = name!=="proposal";
+  $("tab-settings").hidden = name!=="settings";
+}
+
+function init(){
+  loadSettings();
+  loadDraft();
+  applyBrand();
+  fillProposalForm();
+  fillSettingsForm();
+  renderPreview();
+
+  /* tabs */
+  document.querySelectorAll(".tabs button").forEach(function(b){
+    b.addEventListener("click",function(){ switchTab(b.dataset.tab); });
+  });
+
+  /* proposal form -> live preview */
+  ["p_number","p_date","p_valid","c_business","c_contact","c_email","c_phone","c_address","p_note","p_package"]
+    .forEach(function(id){
+      $(id).addEventListener("input",function(){ readDraftFromForm(); saveDraft(); renderPreview(); });
+    });
+
+  /* print */
+  $("btnPrint").addEventListener("click",doPrint);
+  $("btnPrint2").addEventListener("click",doPrint);
+
+  /* new proposal */
+  $("btnNew").addEventListener("click",function(){
+    if(!confirm("Clear the form and start a new proposal? (Your saved settings are not affected.)")) return;
+    draft=null; saveDraft(); fillProposalForm(); renderPreview(); switchTab("proposal");
+  });
+
+  /* ---- settings: company & branding ---- */
+  var compMap={s_name:"name",s_tagline:"tagline",s_email:"email",s_phone:"phone",s_website:"website",s_address:"address",s_preparedBy:"preparedBy"};
+  Object.keys(compMap).forEach(function(id){
+    $(id).addEventListener("input",function(){ settings.company[compMap[id]]=$(id).value; saveSettings(); renderPreview(); });
+  });
+  $("s_primary").addEventListener("input",function(){ settings.company.primary=$("s_primary").value; $("s_primary_hex").textContent=$("s_primary").value; applyBrand(); saveSettings(); });
+  $("s_accent").addEventListener("input",function(){ settings.company.accent=$("s_accent").value; $("s_accent_hex").textContent=$("s_accent").value; applyBrand(); saveSettings(); });
+
+  $("s_logo").addEventListener("change",function(e){
+    var f=e.target.files && e.target.files[0]; if(!f) return;
+    if(f.size>2*1024*1024){ setStatus("That image is large (over 2MB). A smaller logo works best.",true); }
+    var r=new FileReader();
+    r.onload=function(){ settings.company.logo=r.result; saveSettings(); updateLogoPreview(); renderPreview(); };
+    r.readAsDataURL(f);
+  });
+  $("btnRemoveLogo").addEventListener("click",function(){ settings.company.logo=""; saveSettings(); updateLogoPreview(); renderPreview(); });
+
+  /* ---- settings: intro/about/pricing/acceptance text ---- */
+  var textMap={t_welcomeTitle:"welcomeTitle",t_welcomeBody:"welcomeBody",t_aboutTitle:"aboutTitle",t_aboutBody:"aboutBody",t_pricingTitle:"pricingTitle",t_pricingBody:"pricingBody",t_acceptTitle:"acceptTitle",t_acceptBody:"acceptBody"};
+  Object.keys(textMap).forEach(function(id){
+    $(id).addEventListener("input",function(){ settings.text[textMap[id]]=$(id).value; saveSettings(); renderPreview(); });
+  });
+
+  /* ---- settings: packages (event delegation) ---- */
+  $("pkgEditor").addEventListener("input",function(e){
+    var el=e.target, i=el.getAttribute("data-i"), f=el.getAttribute("data-f");
+    if(i==null||!f) return; i=parseInt(i,10);
+    if(f==="services"){ settings.packages[i].services=el.value.split("\n").map(function(s){return s.trim();}).filter(function(s){return s!=="";}); }
+    else{ settings.packages[i][f]=el.value; }
+    saveSettings(); rebuildPackageOptions(draft?draft.packageIndex:0); renderPreview();
+  });
+  $("pkgEditor").addEventListener("click",function(e){
+    var del=e.target.getAttribute("data-del"); if(del==null) return;
+    if(!confirm("Remove this package?")) return;
+    settings.packages.splice(parseInt(del,10),1);
+    if(!settings.packages.length) settings.packages.push({name:"New package",price:"",priceNote:"",desc:"",services:[]});
+    saveSettings(); renderPkgEditor(); rebuildPackageOptions(0); renderPreview();
+  });
+  $("btnAddPkg").addEventListener("click",function(){
+    settings.packages.push({name:"New package",price:"$0",priceNote:"per month",desc:"",services:["First included service"]});
+    saveSettings(); renderPkgEditor(); rebuildPackageOptions(settings.packages.length-1); renderPreview();
+    $("pkgEditor").lastChild.scrollIntoView({behavior:"smooth",block:"center"});
+  });
+
+  /* ---- settings: clauses (event delegation) ---- */
+  $("clauseEditor").addEventListener("input",function(e){
+    var el=e.target, i=el.getAttribute("data-i"), f=el.getAttribute("data-cf");
+    if(i==null||!f) return; i=parseInt(i,10);
+    settings.text.clauses[i][f]=el.value; saveSettings(); renderPreview();
+  });
+  $("clauseEditor").addEventListener("click",function(e){
+    var del=e.target.getAttribute("data-delc"); if(del==null) return;
+    if(!confirm("Remove this clause?")) return;
+    settings.text.clauses.splice(parseInt(del,10),1);
+    saveSettings(); renderClauseEditor(); renderPreview();
+  });
+  $("btnAddClause").addEventListener("click",function(){
+    settings.text.clauses.push({title:"New clause",body:""});
+    saveSettings(); renderClauseEditor(); renderPreview();
+    $("clauseEditor").lastChild.scrollIntoView({behavior:"smooth",block:"center"});
+  });
+
+  /* ---- backup / restore / reset ---- */
+  $("btnExport").addEventListener("click",exportBackup);
+  $("importFile").addEventListener("change",function(e){ var f=e.target.files&&e.target.files[0]; if(f) importBackup(f); e.target.value=""; });
+  $("btnReset").addEventListener("click",function(){
+    if(!confirm("Reset ALL settings (company, packages, clauses) back to the example defaults? This cannot be undone. Consider downloading a backup first.")) return;
+    settings=defaultSettings(); saveSettings(); applyBrand();
+    fillSettingsForm(); rebuildPackageOptions(0); renderPreview();
+    setStatus("Settings reset to example defaults.",false);
+  });
+}
+
+document.addEventListener("DOMContentLoaded",init);
+</script>
+</body>
+</html>
