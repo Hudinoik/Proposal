@@ -8,7 +8,7 @@ on:
       tag:
         description: 'Release tag (vX.Y.Z)'
         required: false
-        default: 'v1.1.2'
+        default: 'v1.1.3'
 
 permissions:
   contents: write
@@ -48,18 +48,21 @@ jobs:
           node-version: 22
       - name: Install tooling
         run: npm install --no-audit --no-fund
+      # Electron 33 runs on macOS 10.15+ (newest Electron requires a much
+      # newer macOS and crashes at launch on older systems).
       - name: Package (unsigned .app bundles)
-        run: npx electron-builder --mac dir --arm64 --x64 --publish never
+        run: npx electron-builder --mac dir --arm64 --x64 --publish never -c.electronVersion=33.4.11
       - name: Ad-hoc sign with @electron/osx-sign (handles every helper correctly)
         run: |
           npm install --no-save @electron/osx-sign@1
           node ci/sign-mac.js "dist/mac-arm64/TCO Agreement Generator.app" "dist/mac/TCO Agreement Generator.app"
           codesign --verify --deep --strict "dist/mac-arm64/TCO Agreement Generator.app"
           codesign --verify --deep --strict "dist/mac/TCO Agreement Generator.app"
-      - name: Smoke test — launch the signed app on macOS
+      - name: Smoke test — launch BOTH signed apps on macOS (Intel via Rosetta)
         run: |
           npm install --no-save playwright-core
           node ci/smoke-mac.js "dist/mac-arm64/TCO Agreement Generator.app/Contents/MacOS/TCO Agreement Generator"
+          node ci/smoke-mac.js "dist/mac/TCO Agreement Generator.app/Contents/MacOS/TCO Agreement Generator"
       - name: Zip (ditto preserves bundle metadata)
         run: |
           (cd dist/mac-arm64 && ditto -c -k --sequesterRsrc --keepParent "TCO Agreement Generator.app" "../../TCO-Agreement-Generator-Mac-AppleSilicon.zip")
@@ -94,6 +97,7 @@ jobs:
             **Mac** — download the ZIP for your Mac (Apple Silicon = M1/M2/M3/M4, otherwise Intel),
             unzip, drag the app into Applications. First run: right-click the app → Open → Open.
             If macOS still blocks it: System Settings → Privacy & Security → scroll down → Open Anyway.
+            Requires macOS 10.15 (Catalina, 2019) or newer.
           files: |
             TCO-Agreement-Generator-Windows.zip
             TCO-Agreement-Generator-Mac-AppleSilicon.zip
