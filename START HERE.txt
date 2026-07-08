@@ -1,0 +1,35 @@
+TCO AGREEMENT GENERATOR - START HERE
+=====================================
+
+GET GOING (10 seconds)
+  1. Right-click the ZIP you downloaded -> "Extract All..." and pick a
+     permanent home for the folder (e.g. Documents\TCO Agreement Generator).
+     Don't run it from inside the ZIP - extract first.
+  2. Open the folder and double-click:  Create Desktop Shortcut.bat
+     -> puts a "TCO Agreement Generator" icon (your TCO logo) on the Desktop.
+  3. From now on, open the app from that Desktop icon. It opens in its own
+     window, like a normal program. Works completely offline.
+
+WHAT'S IN THIS FOLDER
+  index.html                    ... the app itself (all your data lives here*)
+  TCO Agreement Generator.bat   ... opens the app in its own window
+  Create Desktop Shortcut.bat   ... run once to get the Desktop icon
+  tco.ico                       ... the TCO logo icon
+  Start TCO AI Helper.bat       ... optional: one-click AI drafting on your
+  TCO-AI-Helper.ps1                 Claude subscription (see README.md)
+  tco_ai_helper.py              ... Mac version of the helper
+  README.md                     ... full instructions
+
+*Your packages, prices, wording and drafts are saved by your browser on this
+ computer automatically. Use Settings -> "Download backup" now and then to
+ keep a backup file (also how you move to a new computer).
+
+AI DRAFTING WITH YOUR CLAUDE SUBSCRIPTION (optional, one-time setup)
+  1. Install Claude Code from https://claude.ai/download and sign in once
+     with your Claude account.
+  2. Double-click "Start TCO AI Helper.bat" and leave its window open.
+  3. In the app, paste meeting notes and click "Draft with Claude".
+
+IMPORTANT
+  Keep all these files together in the same folder. The legal wording is not
+  legal advice - have your attorney review it before sending to clients.
