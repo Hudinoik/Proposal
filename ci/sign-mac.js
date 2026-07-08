@@ -16,7 +16,9 @@
   }
   for (const app of apps) {
     console.log('signing (ad-hoc):', app);
-    await sign({ app, identity: '-' });
+    /* identityValidation:false skips the keychain lookup so the ad-hoc
+       identity '-' is used as-is (verified against osx-sign v1 source) */
+    await sign({ app, identity: '-', identityValidation: false });
   }
   console.log('SIGN OK');
 })().catch((e) => { console.error('SIGN FAILED:', e); process.exit(1); });
