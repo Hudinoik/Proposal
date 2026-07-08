@@ -52,7 +52,7 @@ jobs:
         run: npx electron-builder --mac dir --arm64 --x64 --publish never
       - name: Ad-hoc sign with @electron/osx-sign (handles every helper correctly)
         run: |
-          npm install --no-save @electron/osx-sign
+          npm install --no-save @electron/osx-sign@1
           node ci/sign-mac.js "dist/mac-arm64/TCO Agreement Generator.app" "dist/mac/TCO Agreement Generator.app"
           codesign --verify --deep --strict "dist/mac-arm64/TCO Agreement Generator.app"
           codesign --verify --deep --strict "dist/mac/TCO Agreement Generator.app"
