@@ -8,43 +8,71 @@ on:
       tag:
         description: 'Release tag (vX.Y.Z)'
         required: false
-        default: 'v1.1.0'
+        default: 'v1.1.1'
 
 permissions:
   contents: write
 
 jobs:
-  build:
+  windows:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-
       - name: Install tooling
         run: npm install --no-save @electron/packager electron
-
-      - name: Package all platforms
+      - name: Package Windows
         run: |
           EV=$(node -p "require('electron/package.json').version")
-          npx electron-packager ./electron "TCO Agreement Generator" --platform=win32  --arch=x64   --icon=electron/tco.ico  --out=dist --overwrite --electron-version=$EV
-          npx electron-packager ./electron "TCO Agreement Generator" --platform=darwin --arch=arm64 --icon=electron/tco.icns --out=dist --overwrite --electron-version=$EV
-          npx electron-packager ./electron "TCO Agreement Generator" --platform=darwin --arch=x64   --icon=electron/tco.icns --out=dist --overwrite --electron-version=$EV
-          # packager sometimes skips the darwin icon; set it directly
-          for a in arm64 x64; do
-            cp electron/tco.icns "dist/TCO Agreement Generator-darwin-$a/TCO Agreement Generator.app/Contents/Resources/electron.icns"
-          done
-
-      - name: Zip artifacts
-        run: |
+          npx electron-packager ./electron "TCO Agreement Generator" --platform=win32 --arch=x64 --icon=electron/tco.ico --out=dist --overwrite --electron-version=$EV
           cd dist
           mv "TCO Agreement Generator-win32-x64" "TCO Agreement Generator"
           zip -qry "../TCO-Agreement-Generator-Windows.zip" "TCO Agreement Generator"
-          (cd "TCO Agreement Generator-darwin-arm64" && zip -qry "../../TCO-Agreement-Generator-Mac-AppleSilicon.zip" "TCO Agreement Generator.app")
-          (cd "TCO Agreement Generator-darwin-x64"   && zip -qry "../../TCO-Agreement-Generator-Mac-Intel.zip" "TCO Agreement Generator.app")
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: TCO-Agreement-Generator-Windows.zip
 
+  mac:
+    # Built and ad-hoc signed on a real Mac so Gatekeeper doesn't report
+    # the app as "damaged"; zipped with ditto to preserve bundle metadata.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install tooling
+        run: npm install --no-save @electron/packager electron
+      - name: Package, sign, zip
+        run: |
+          EV=$(node -p "require('electron/package.json').version")
+          npx electron-packager ./electron "TCO Agreement Generator" --platform=darwin --arch=arm64 --icon=electron/tco.icns --out=dist --overwrite --electron-version=$EV
+          npx electron-packager ./electron "TCO Agreement Generator" --platform=darwin --arch=x64   --icon=electron/tco.icns --out=dist --overwrite --electron-version=$EV
+          for a in arm64 x64; do
+            APP="dist/TCO Agreement Generator-darwin-$a/TCO Agreement Generator.app"
+            cp electron/tco.icns "$APP/Contents/Resources/electron.icns"
+            codesign --force --deep --sign - "$APP"
+            codesign --verify --deep "$APP"
+          done
+          (cd "dist/TCO Agreement Generator-darwin-arm64" && ditto -c -k --sequesterRsrc --keepParent "TCO Agreement Generator.app" "../../TCO-Agreement-Generator-Mac-AppleSilicon.zip")
+          (cd "dist/TCO Agreement Generator-darwin-x64"   && ditto -c -k --sequesterRsrc --keepParent "TCO Agreement Generator.app" "../../TCO-Agreement-Generator-Mac-Intel.zip")
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac
+          path: |
+            TCO-Agreement-Generator-Mac-AppleSilicon.zip
+            TCO-Agreement-Generator-Mac-Intel.zip
+
+  release:
+    needs: [windows, mac]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
@@ -55,12 +83,12 @@ jobs:
             one-click AI drafting on your Claude subscription (install Claude Code
             from claude.ai/download and sign in once; the app finds it automatically).
 
-            **Downloads**
-            - Windows: `TCO-Agreement-Generator-Windows.zip` — extract, open the folder,
-              double-click `TCO Agreement Generator.exe` (first run: More info → Run anyway).
-            - Mac (M1/M2/M3/M4): `TCO-Agreement-Generator-Mac-AppleSilicon.zip` — unzip, drag the
-              app to Applications, first run: right-click → Open.
-            - Mac (Intel): `TCO-Agreement-Generator-Mac-Intel.zip` — same steps.
+            **Windows** — `TCO-Agreement-Generator-Windows.zip`: extract, open the folder,
+            double-click `TCO Agreement Generator.exe`. First run: SmartScreen → More info → Run anyway.
+
+            **Mac** — download the ZIP for your Mac (Apple Silicon = M1/M2/M3/M4, otherwise Intel),
+            unzip, drag the app into Applications. First run: right-click the app → Open → Open.
+            If macOS still blocks it: System Settings → Privacy & Security → scroll down → Open Anyway.
           files: |
             TCO-Agreement-Generator-Windows.zip
             TCO-Agreement-Generator-Mac-AppleSilicon.zip
