@@ -48,18 +48,23 @@ jobs:
           node-version: 22
       - name: Install tooling
         run: npm install --no-audit --no-fund
-      - name: Package (electron-builder, ad-hoc signed)
-        run: npx electron-builder --mac zip --arm64 --x64
-      - name: Smoke test — launch the packaged app on macOS
+      - name: Package (unsigned .app bundles)
+        run: npx electron-builder --mac dir --arm64 --x64 --publish never
+      - name: Ad-hoc sign with @electron/osx-sign (handles every helper correctly)
+        run: |
+          npm install --no-save @electron/osx-sign
+          npx electron-osx-sign "dist/mac-arm64/TCO Agreement Generator.app" --identity=-
+          npx electron-osx-sign "dist/mac/TCO Agreement Generator.app" --identity=-
+          codesign --verify --deep --strict "dist/mac-arm64/TCO Agreement Generator.app"
+          codesign --verify --deep --strict "dist/mac/TCO Agreement Generator.app"
+      - name: Smoke test — launch the signed app on macOS
         run: |
           npm install --no-save playwright-core
-          BIN="$(ls -d dist/mac-arm64/*.app)/Contents/MacOS/TCO Agreement Generator"
-          node ci/smoke-mac.js "$BIN"
-      - name: Rename artifacts
+          node ci/smoke-mac.js "dist/mac-arm64/TCO Agreement Generator.app/Contents/MacOS/TCO Agreement Generator"
+      - name: Zip (ditto preserves bundle metadata)
         run: |
-          ls -la dist
-          mv dist/*arm64-mac.zip TCO-Agreement-Generator-Mac-AppleSilicon.zip
-          mv dist/*-mac.zip TCO-Agreement-Generator-Mac-Intel.zip
+          (cd dist/mac-arm64 && ditto -c -k --sequesterRsrc --keepParent "TCO Agreement Generator.app" "../../TCO-Agreement-Generator-Mac-AppleSilicon.zip")
+          (cd dist/mac       && ditto -c -k --sequesterRsrc --keepParent "TCO Agreement Generator.app" "../../TCO-Agreement-Generator-Mac-Intel.zip")
       - uses: actions/upload-artifact@v4
         with:
           name: mac
