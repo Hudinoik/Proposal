@@ -4,6 +4,11 @@ on:
   push:
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (vX.Y.Z)'
+        required: false
+        default: 'v1.1.0'
 
 permissions:
   contents: write
@@ -43,8 +48,8 @@ jobs:
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.0
-          name: TCO Agreement Generator v1.0.0
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          name: TCO Agreement Generator ${{ github.event.inputs.tag || github.ref_name }}
           body: |
             One program that does it all — agreement generator, PDF export, and
             one-click AI drafting on your Claude subscription (install Claude Code

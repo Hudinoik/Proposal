@@ -464,6 +464,7 @@ function loadDraft(){
         saveDraft();
       }
       if(draft && !draft.serviceIds) draft=null;
+      if(draft && !draft.header){ draft.header=defaultHeader(); saveDraft(); }
       return;
     }
   }catch(e){}
@@ -511,10 +512,21 @@ function defaultFeesFor(ids){
   });
   return fees;
 }
+function defaultHeader(){
+  return {
+    tagline:state.company.tagline,
+    providerName:state.company.name,
+    intro:"This Agreement is entered into between:",
+    providerLabel:"Service Provider:",
+    clientLabel:"Client:",
+    showLogo:true
+  };
+}
 function newDraft(ids){
   draft={
     serviceIds:ids.slice(),
     docTitle:comboTitle(ids),
+    header:defaultHeader(),
     client:{business:"", rep:"", effectiveDate:""},
     svc:ids.map(function(id){ var s=svcById(id); return {id:id, name:s.name, sections:cp(s.sections)}; }),
     fees:defaultFeesFor(ids),
@@ -844,6 +856,15 @@ function renderForm(){
   h+='<div class="field"><label>Client representative <span class="sub">(optional)</span></label><input type="text" value="'+escA(draft.client.rep)+'" oninput="updClient(\'rep\',this.value)" placeholder="e.g. Barry Engle"></div></div>';
   h+='<div class="frow"><div class="field"><label>Effective date <span class="sub">(leave blank for a fill-in line)</span></label><input type="date" value="'+escA(draft.client.effectiveDate)+'" oninput="updClient(\'effectiveDate\',this.value)"></div>';
   h+='<div class="field"><label>Document title</label><input type="text" value="'+escA(draft.docTitle)+'" oninput="draft.docTitle=this.value;dirty()"></div></div>';
+  var hd=draft.header||defaultHeader();
+  h+='<details class="cust"><summary>Edit the document header</summary><div class="inner">';
+  h+='<div class="frow" style="margin-top:8px"><div class="field"><label>Subtitle <span class="sub">(the small line under the title)</span></label><input type="text" value="'+escA(hd.tagline)+'" oninput="updHeader(\'tagline\',this.value)"></div>';
+  h+='<div class="field"><label>Company name shown <span class="sub">(header &amp; signature)</span></label><input type="text" value="'+escA(hd.providerName)+'" oninput="updHeader(\'providerName\',this.value)"></div></div>';
+  h+='<div class="frow"><div class="field w100"><label>Opening line</label><input type="text" value="'+escA(hd.intro)+'" oninput="updHeader(\'intro\',this.value)"></div></div>';
+  h+='<div class="frow"><div class="field"><label>Label above your company</label><input type="text" value="'+escA(hd.providerLabel)+'" oninput="updHeader(\'providerLabel\',this.value)"></div>';
+  h+='<div class="field"><label>Label above the client</label><input type="text" value="'+escA(hd.clientLabel)+'" oninput="updHeader(\'clientLabel\',this.value)"></div></div>';
+  h+='<div class="checkline"><input type="checkbox" id="hdLogo" '+(hd.showLogo!==false?"checked":"")+' onchange="updHeader(\'showLogo\',this.checked)"><label for="hdLogo">Show the logo in the header</label></div>';
+  h+='</div></details>';
   h+='</div>';
 
   /* --- fees --- */
@@ -1089,6 +1110,7 @@ function updProjItem(i,j,k,v){
   if(el) el.textContent=money((Number(it.qty)||0)*(Number(it.rate)||0));
 }
 function updClient(k,v){ draft.client[k]=v; dirty(); }
+function updHeader(k,v){ if(!draft.header) draft.header=defaultHeader(); draft.header[k]=v; dirty(); }
 function startOver(){
   if(!confirm("Clear this agreement and start over?")) return;
   var ids=draft.serviceIds.slice(); newDraft(ids); renderForm(); renderPreview();
@@ -1163,17 +1185,19 @@ function renderPreview(){
   var el=document.getElementById("preview");
   if(!draft){ el.innerHTML='<div class="doc"><div class="empty-hint">Your agreement preview will appear here.<br><br>Choose a service on the left to begin.</div></div>'; return; }
   var c=state.company, multi=draft.svc.length>1;
+  var hd=draft.header||defaultHeader();
+  var provName=hd.providerName||c.name;
   var h='<div class="doc">';
 
   /* header */
   h+='<div class="dhead">';
-  if(c.logo) h+='<img src="'+c.logo+'" alt="logo">';
-  h+='<div class="ht"><h1>'+esc(draft.docTitle||"Services Agreement")+'</h1><div class="tagline">'+esc(c.tagline||"")+'</div></div></div>';
+  if(c.logo&&hd.showLogo!==false) h+='<img src="'+c.logo+'" alt="logo">';
+  h+='<div class="ht"><h1>'+esc(draft.docTitle||"Services Agreement")+'</h1>'+(hd.tagline?'<div class="tagline">'+esc(hd.tagline)+'</div>':"")+'</div></div>';
 
   /* parties */
-  h+='<div class="parties"><p>This Agreement is entered into between:</p>';
-  h+='<p><b>Service Provider:</b><br>'+esc(c.name)+'</p><p>and</p>';
-  h+='<p><b>Client:</b><br>'+(draft.client.business?esc(draft.client.business):"__________________")+(draft.client.rep?'<br><span style="font-size:13px">Client Representative: '+esc(draft.client.rep)+'</span>':"")+'</p>';
+  h+='<div class="parties">'+(hd.intro?'<p>'+esc(hd.intro)+'</p>':"");
+  h+='<p><b>'+esc(hd.providerLabel||"Service Provider:")+'</b><br>'+esc(provName)+'</p><p>and</p>';
+  h+='<p><b>'+esc(hd.clientLabel||"Client:")+'</b><br>'+(draft.client.business?esc(draft.client.business):"__________________")+(draft.client.rep?'<br><span style="font-size:13px">Client Representative: '+esc(draft.client.rep)+'</span>':"")+'</p>';
   h+='<p><b>Effective Date:</b> '+esc(fmtDate(draft.client.effectiveDate))+'</p></div>';
 
   /* numbered sections */
@@ -1233,7 +1257,7 @@ function renderPreview(){
   /* acceptance */
   n++;
   h+='<section class="sig"><h2>'+n+'. Acceptance</h2><p>'+esc(state.acceptance)+'</p>';
-  h+='<div class="keep"><div class="sgrid"><div class="scol"><b>Service Provider – '+esc(c.name)+'</b>'
+  h+='<div class="keep"><div class="sgrid"><div class="scol"><b>Service Provider – '+esc(provName)+'</b>'
     +'<div class="sline"></div><div class="slbl">Name</div><div class="sline"></div><div class="slbl">Signature</div><div class="sline"></div><div class="slbl">Date</div></div>';
   h+='<div class="scol"><b>Client – '+(draft.client.business?esc(draft.client.business):"________________")+(draft.client.rep?" ("+esc(draft.client.rep)+")":"")+'</b>'
     +'<div class="sline"></div><div class="slbl">Name</div><div class="sline"></div><div class="slbl">Signature</div><div class="sline"></div><div class="slbl">Date</div></div></div></div></section>';

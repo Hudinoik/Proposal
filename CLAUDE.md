@@ -1,0 +1,51 @@
+# CLAUDE.md
+
+Client service-agreement generator for TCO (The Contractors Office), built for a
+non-technical user (Yehuda). Ships two ways from ONE source: `index.html` (runs as a
+plain file in a browser) and `electron/` (the same file wrapped as the Windows/Mac
+desktop app users actually download).
+
+## Golden rules
+- `index.html` IS the app — one self-contained file, no frameworks, no CDNs, no
+  build step. ES5-style JS, string-built DOM, inline `on*` handlers.
+- After ANY edit to `index.html`: `cp index.html electron/index.html` (they must
+  stay identical; the desktop build packages the electron copy).
+- User data lives in localStorage (`tco_app_v2` settings, `tco_draft_v2` current
+  draft). Never rename keys or reshape stored data without a migration
+  (see `migrateState()` / `loadDraft()` — old drafts must keep loading).
+- Content defaults come from TCO's real signed agreements and pricing sheet
+  (see `defaults()`); the legal clauses carry an attorney-review disclaimer — keep it.
+- UI style: no emoji in chrome, inline SVG icons, navy `#052B6A` primary,
+  lime `#8EB91A` accents only. Write UI copy for a non-technical reader.
+
+## Where things are (all inside index.html)
+- `defaults()` — company/branding, `services[]` (per-service wording sections,
+  packages with per-tier addOns, defaultFees), `legal[]`, `rates[]`, `ai`.
+- Draft model — `serviceIds[]` (multi = combined agreement), per-service wording
+  copies in `svc[]`, `header`, `fees[]` (types: package/addon/onetime/monthly/
+  perunit/seasonal/project), `legalOn`, `paymentTerms`.
+- Rendering — `renderForm()` (left pane), `renderPreview()` (document, dynamic
+  section numbering), `renderSettings()`; `dirty(structural)` saves + repaints.
+- AI drafting — `buildAIPrompt()` (catalog + JSON schema) → `applyAIResult()`.
+  Connection order: `window.tcoNative` (desktop → spawns `claude -p`, user's
+  subscription) → localhost helper `:8765` (`tco_ai_helper.py`) → API key →
+  claude.ai copy/paste. Degrade gracefully; never hard-require any of them.
+- Desktop shell — `electron/main.js` (Claude Code discovery across GUI-safe
+  paths, `save-pdf` via `printToPDF`), `electron/preload.js` (bridge).
+
+## Verify (before every push)
+Playwright drives the real thing; suites live in the session scratchpad
+(`test_v3.js`, `test_header.js`, `test_electron.js`, `test_helper.js` — recreate
+from git history if lost). Browser: `NODE_PATH=/opt/node22/lib/node_modules node
+test_v3.js` against `file:///.../index.html`. Desktop: download the Linux Electron
+binary and run under `xvfb-run` with a stub `claude` on PATH. Minimum bar: combo
+agreement renders + renumbers, fee totals correct, AI paste-back applies, draft
+survives reload, PDF generates, zero console errors (ignore the expected
+`ERR_CONNECTION_REFUSED` helper ping).
+
+## Release
+Work on branch `claude/tco-proposal-generator-plan-mjyaqi`; local tag pushes are
+403-blocked. Ship via GitHub Actions: dispatch `.github/workflows/build-desktop.yml`
+on this branch with input `tag: vX.Y.Z` (bump every release — see workflow default).
+It builds Win x64 + Mac arm64/x64 zips and publishes them as a GitHub Release,
+which is where the user downloads the app.
