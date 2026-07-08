@@ -32,14 +32,40 @@ attorney review and approve every clause**, then paste the approved wording into
 
 ---
 
-## How to open it
+## The desktop app (recommended — one program, Windows & Mac)
 
-1. Find the file named **`index.html`** in this folder.
-2. **Double-click it.** It opens in your web browser (Chrome or Edge work best).
-3. That's it — you're ready to make an agreement.
+The app ships as a single desktop program with the TCO logo as its icon.
+Everything is inside it: the agreement generator, PDF saving, and one-click
+AI drafting on your Claude subscription.
 
-> Tip: right-click `index.html` → *Open with* → Chrome, and/or drag it onto your
-> browser's bookmarks bar to keep it handy.
+**Windows**
+1. Download `TCO-Agreement-Generator-Windows.zip`, right-click → **Extract All…**
+   to a permanent folder (e.g. `Documents`).
+2. Open the extracted folder and double-click **`TCO Agreement Generator.exe`**.
+   First run only: if SmartScreen appears, click **More info → Run anyway**.
+3. Right-click the exe → **Send to → Desktop (create shortcut)**, or pin the
+   running app to your taskbar.
+
+**Mac**
+1. Download the Mac ZIP that matches your machine — **Apple Silicon** (M1/M2/M3/M4)
+   or **Intel** — and double-click it to unzip.
+2. Drag **TCO Agreement Generator.app** into **Applications**.
+3. First run only: **right-click the app → Open → Open** (it isn't signed with an
+   Apple developer certificate, so a normal double-click is blocked the first time).
+
+**One-click AI drafting:** install **Claude Code** from claude.ai/download and sign
+in once with your Claude account — the app finds it automatically and "Draft with
+Claude" runs on your subscription. No other setup.
+
+Your data (prices, wording, drafts) is stored by the app on your computer and saves
+automatically. Use *Settings → Download backup* now and then.
+
+---
+
+## Alternative: run it from the plain file
+
+`index.html` is the same app as a single file — double-click it and it opens in
+your web browser (Chrome or Edge work best). Handy if you can't install anything.
 
 ---
 
@@ -53,19 +79,18 @@ fees, and client-specific scope points. **Always review before sending.**
 ### Option A — one-click with your Claude subscription (recommended, no extra cost)
 
 Your claude.ai subscription can't be plugged into other apps directly, but it **does
-include Claude Code**, which can run on your computer. The **TCO AI Helper** (included
-in this folder) uses that to give you true one-click drafting on your subscription:
+include Claude Code**, which runs on your computer.
 
-1. **One time:** install Claude Code from [claude.ai/download](https://claude.ai/download)
-   and sign in once with your Claude account.
-2. Keep the helper files in the same folder as `index.html`. When you want one-click
-   drafting, double-click **"Start TCO AI Helper"** (Windows: the `.bat` file;
-   Mac: the `.command` file) and leave its window open.
-3. That's it. The app shows "Connected to the Claude helper", and **Draft with Claude**
-   works in one click — billed to your subscription, no API key ever.
+- **Desktop app:** just install Claude Code from
+  [claude.ai/download](https://claude.ai/download) and sign in once with your Claude
+  account. The app detects it automatically — "Draft with Claude" then works in one
+  click, billed to your subscription, no API key ever.
+- **Plain `index.html` in a browser:** additionally run the small **TCO AI Helper**
+  (`tco_ai_helper.py` / `TCO-AI-Helper.ps1`, in this repository) and leave its window
+  open; it bridges the browser to Claude Code. It only listens on your own computer
+  (`127.0.0.1`) — nothing is exposed to the network.
 
-The helper only listens on your own computer (`127.0.0.1`) — nothing is exposed to
-the network. *Settings → AI assistant → Test helper connection* confirms it's running.
+*Settings → AI assistant → Test Claude connection* confirms it's working.
 
 ### Option B — claude.ai in a browser tab (zero setup)
 

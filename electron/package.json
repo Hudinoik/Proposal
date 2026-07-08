@@ -1,0 +1,9 @@
+{
+  "name": "tco-agreement-generator",
+  "productName": "TCO Agreement Generator",
+  "version": "1.0.0",
+  "description": "Client service agreement generator for TCO (The Contractors Office)",
+  "main": "main.js",
+  "author": "TCO (The Contractors Office)",
+  "license": "UNLICENSED"
+}
