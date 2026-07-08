@@ -45,7 +45,19 @@ survives reload, PDF generates, zero console errors (ignore the expected
 
 ## Release
 Work on branch `claude/tco-proposal-generator-plan-mjyaqi`; local tag pushes are
-403-blocked. Ship via GitHub Actions: dispatch `.github/workflows/build-desktop.yml`
-on this branch with input `tag: vX.Y.Z` (bump every release — see workflow default).
-It builds Win x64 + Mac arm64/x64 zips and publishes them as a GitHub Release,
-which is where the user downloads the app.
+403-blocked. Ship via GitHub Actions (`.github/workflows/build-desktop.yml`):
+either dispatch with input `tag: vX.Y.Z`, or edit the `RELEASE` file (first line
+= tag, bump every release) and push — both build Win x64 + Mac arm64/x64 zips
+and publish a GitHub Release, which is where the user downloads the app.
+
+macOS facts (learned the hard way — don't regress):
+- Mac job runs on `macos-26` (match the user's OS), packages with
+  electron-builder pinned to Electron 33 (`-c.electronVersion`, macOS 10.15+),
+  ad-hoc signs via `ci/sign-mac.js` (@electron/osx-sign@1, per-helper — a blunt
+  `codesign --deep` breaks helpers), then `ci/smoke-mac.js` must LAUNCH the
+  arm64 app before release (hard gate; Intel-under-Rosetta check is best-effort).
+- Ad-hoc-signed apps crash at launch on DOWNLOADED (quarantined) copies:
+  dyld "different Team IDs" refusing Electron Framework. User-side fix is
+  `xattr -cr` — shipped as "Fix and Open (Mac).command" inside each Mac zip
+  (source: `ci/fix-and-open-command.sh`). The real fix would be Developer ID
+  signing + notarization (needs Apple Developer Program).
