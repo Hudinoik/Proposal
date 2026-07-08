@@ -53,8 +53,7 @@ jobs:
       - name: Ad-hoc sign with @electron/osx-sign (handles every helper correctly)
         run: |
           npm install --no-save @electron/osx-sign
-          npx electron-osx-sign "dist/mac-arm64/TCO Agreement Generator.app" --identity=-
-          npx electron-osx-sign "dist/mac/TCO Agreement Generator.app" --identity=-
+          node ci/sign-mac.js "dist/mac-arm64/TCO Agreement Generator.app" "dist/mac/TCO Agreement Generator.app"
           codesign --verify --deep --strict "dist/mac-arm64/TCO Agreement Generator.app"
           codesign --verify --deep --strict "dist/mac/TCO Agreement Generator.app"
       - name: Smoke test — launch the signed app on macOS
