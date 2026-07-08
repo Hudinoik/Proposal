@@ -42,7 +42,9 @@ jobs:
     # nested helper with the correct entitlements (a blunt `codesign --deep`
     # breaks Electron's helper processes and the app crashes on launch).
     # A smoke test then LAUNCHES the packaged app before it can be released.
-    runs-on: macos-latest
+    # Pinned to macos-26: the user runs macOS 26, and v1.1.2 launched fine
+    # on the macOS 15 runner yet crashed on 26 — test on what users run.
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
