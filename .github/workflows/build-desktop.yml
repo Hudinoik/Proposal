@@ -3,6 +3,8 @@ name: Build desktop apps
 on:
   push:
     tags: ['v*']
+    branches: ['claude/tco-proposal-generator-plan-mjyaqi']
+    paths: ['RELEASE']
   workflow_dispatch:
     inputs:
       tag:
@@ -78,14 +80,22 @@ jobs:
     needs: [windows, mac]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+      - name: Resolve release tag (dispatch input, else RELEASE file, else ref)
+        id: ver
+        run: |
+          TAG="${{ github.event.inputs.tag }}"
+          if [ -z "$TAG" ] && [ -f RELEASE ]; then TAG=$(head -1 RELEASE | tr -d ' \r\n'); fi
+          if [ -z "$TAG" ]; then TAG="${GITHUB_REF_NAME}"; fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@v4
         with:
           merge-multiple: true
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
-          name: TCO Agreement Generator ${{ github.event.inputs.tag || github.ref_name }}
+          tag_name: ${{ steps.ver.outputs.tag }}
+          name: TCO Agreement Generator ${{ steps.ver.outputs.tag }}
           body: |
             One program that does it all — agreement generator, PDF export, and
             one-click AI drafting on your Claude subscription (install Claude Code
