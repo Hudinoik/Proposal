@@ -640,15 +640,56 @@ function aiApplyPasted(){
   if(!v){ aiStatus("Paste Claude's reply into the box first.","err"); return; }
   applyAIResult(v);
 }
-function aiDraftAPI(){
+/* --- connection to your Claude subscription via the local helper --- */
+var HELPER_URL="http://127.0.0.1:8765";
+var helperUp=false, lastPing=0;
+function paintAIConn(){
+  var el=document.getElementById("aiConn"); if(!el) return;
+  if(helperUp) el.innerHTML='&#9679; Connected to the <b>Claude helper</b> — one-click drafting runs on your Claude subscription.';
+  else if(state.ai.apiKey) el.innerHTML='&#9675; Helper not running — one-click drafting will use your <b>API key</b>. Start "Start TCO AI Helper" to use your subscription instead.';
+  else el.innerHTML='&#9675; To draft in one click, start the <b>Claude helper</b> (uses your subscription — see Settings → AI assistant). Zero-setup alternative: "Open claude.ai with prompt".';
+}
+function pingHelper(force,cb){
+  var now=Date.now();
+  if(!force && now-lastPing<10000){ paintAIConn(); if(cb)cb(); return; }
+  lastPing=now;
+  var ctl=(typeof AbortController!=="undefined")?new AbortController():null;
+  var t=ctl?setTimeout(function(){ try{ctl.abort();}catch(e){} },900):null;
+  fetch(HELPER_URL+"/health",ctl?{signal:ctl.signal}:{})
+    .then(function(r){ return r.json(); })
+    .then(function(j){ if(t)clearTimeout(t); helperUp=!!(j&&j.ok); paintAIConn(); if(cb)cb(); })
+    .catch(function(){ if(t)clearTimeout(t); helperUp=false; paintAIConn(); if(cb)cb(); });
+}
+
+function aiDraft(){
   var notes=aiNotesText();
   if(!notes){ aiStatus("Paste or upload your notes first.","err"); return; }
-  if(!state.ai.apiKey){
-    aiStatus("No API key set. Add one in Settings → AI assistant, or use the copy-prompt method (works with your claude.ai subscription).","err");
-    return;
-  }
-  aiStatus("Asking Claude to read your notes…");
+  var prompt=buildAIPrompt(notes);
   var btn=document.getElementById("aiApiBtn"); if(btn) btn.disabled=true;
+  var done=function(){ var b=document.getElementById("aiApiBtn"); if(b) b.disabled=false; };
+  var tryApi=function(){
+    if(!state.ai.apiKey){
+      aiStatus('One-click drafting needs the Claude helper running (your subscription — see Settings → AI assistant) or an API key. Zero-setup: click "Open claude.ai with prompt".',"err");
+      done(); return;
+    }
+    aiStatus("Drafting with Claude via your API key…");
+    apiDraft(prompt, done);
+  };
+  var run=function(){
+    if(helperUp){
+      aiStatus("Drafting with Claude on your subscription (local helper)… this can take up to a minute.");
+      fetch(HELPER_URL+"/draft",{method:"POST",headers:{"Content-Type":"text/plain"},body:prompt})
+        .then(function(r){ return r.json(); })
+        .then(function(j){
+          if(j&&j.ok&&j.text){ applyAIResult(j.text); done(); }
+          else { aiStatus("Helper reported a problem: "+((j&&j.error)||"unknown error"),"err"); done(); }
+        })
+        .catch(function(){ helperUp=false; paintAIConn(); tryApi(); });
+    } else tryApi();
+  };
+  pingHelper(true,run);
+}
+function apiDraft(prompt,done){
   fetch("https://api.anthropic.com/v1/messages",{
     method:"POST",
     headers:{
@@ -660,7 +701,7 @@ function aiDraftAPI(){
     body:JSON.stringify({
       model:state.ai.model||"claude-sonnet-5",
       max_tokens:2500,
-      messages:[{role:"user",content:buildAIPrompt(notes)}]
+      messages:[{role:"user",content:prompt}]
     })
   }).then(function(r){
     if(!r.ok) return r.text().then(function(t){ throw new Error("API error "+r.status+": "+t.slice(0,200)); });
@@ -671,9 +712,21 @@ function aiDraftAPI(){
   }).catch(function(e){
     var msg=String(e&&e.message||e);
     if(/401|invalid|authentication/i.test(msg)) aiStatus("That API key doesn't seem to work — check it in Settings → AI assistant.","err");
-    else if(/Failed to fetch|NetworkError|CSP|blocked/i.test(msg)) aiStatus("Couldn't reach the Claude API from here (no connection, or this hosted preview blocks it). Use the copy-prompt method instead — it works everywhere.","err");
+    else if(/Failed to fetch|NetworkError|CSP|blocked/i.test(msg)) aiStatus('Couldn\'t reach the Claude API from here. Use the Claude helper or "Open claude.ai with prompt" instead.',"err");
     else aiStatus("Something went wrong: "+msg,"err");
-  }).then(function(){ var b=document.getElementById("aiApiBtn"); if(b) b.disabled=false; });
+  }).then(function(){ if(done) done(); });
+}
+function aiOpenClaude(){
+  var notes=aiNotesText();
+  if(!notes){ aiStatus("Paste or upload your notes first.","err"); return; }
+  var prompt=buildAIPrompt(notes);
+  if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(prompt)["catch"](function(){ fallbackCopy(prompt); }); }
+  else fallbackCopy(prompt);
+  var url="https://claude.ai/new?q="+encodeURIComponent(prompt);
+  if(url.length>7000) url="https://claude.ai/new";
+  window.open(url,"_blank");
+  var pw=document.getElementById("aiPasteWrap"); if(pw) pw.open=true;
+  aiStatus("claude.ai opened in a new tab — the prompt is also in your clipboard (paste it there if the chat is empty). When Claude answers, copy the whole reply into the box below and click Apply.","ok");
 }
 function applyAIResult(text){
   var raw=String(text||"");
@@ -737,13 +790,14 @@ function renderForm(){
   }
   h+='<div class="field w100"><textarea id="aiNotes" style="min-height:96px" placeholder="Paste meeting notes or the client\'s email here…"></textarea></div>';
   h+='<div class="addmenu">';
-  h+='<button class="btn primary sm" id="aiApiBtn" onclick="aiDraftAPI()">Draft with Claude</button>';
-  h+='<button class="btn sm" onclick="aiCopyPrompt()">Copy prompt for claude.ai</button>';
+  h+='<button class="btn primary sm" id="aiApiBtn" onclick="aiDraft()">Draft with Claude</button>';
+  h+='<button class="btn sm" onclick="aiOpenClaude()">Open claude.ai with prompt</button>';
   h+='<label class="btn sm" style="display:inline-flex;align-items:center;cursor:pointer">Upload notes (.txt)<input type="file" accept=".txt,.md,.text,text/plain" style="display:none" onchange="aiUpload(this)"></label>';
   h+='</div>';
+  h+='<div id="aiConn" class="status-line"></div>';
   h+='<div id="aiStatus" class="status-line"></div>';
   h+='<details class="cust" id="aiPasteWrap" style="margin-top:10px"><summary>Paste Claude\'s reply (from claude.ai)</summary><div class="inner">';
-  h+='<p class="hint" style="margin-top:6px">Using your claude.ai subscription: click "Copy prompt", paste it into a chat at claude.ai, then copy Claude\'s whole answer into this box.</p>';
+  h+='<p class="hint" style="margin-top:6px">Zero-setup path using your claude.ai subscription: click "Open claude.ai with prompt", send it there, then copy Claude\'s whole answer into this box. <button class="btn sm quiet" onclick="aiCopyPrompt()">Copy the prompt again</button></p>';
   h+='<div class="field w100"><textarea id="aiPaste" style="min-height:80px" placeholder="Paste Claude\'s JSON answer here…"></textarea></div>';
   h+='<button class="btn sm primary" onclick="aiApplyPasted()">Apply Claude\'s reply</button>';
   h+='</div></details>';
@@ -758,7 +812,7 @@ function renderForm(){
   }
   h+='</div></div>';
 
-  if(!draft){ h+='<div class="card"><p class="hint" style="margin:0">Select a service above to start a new agreement.</p></div>'; document.getElementById("formPane").innerHTML=h; return; }
+  if(!draft){ h+='<div class="card"><p class="hint" style="margin:0">Select a service above to start a new agreement.</p></div>'; document.getElementById("formPane").innerHTML=h; pingHelper(false); return; }
 
   /* --- client details --- */
   h+='<div class="card">'+stepH(2,"Client details")+'<p class="hint">These fill in the top of the agreement and the signature section.</p>';
@@ -816,6 +870,7 @@ function renderForm(){
   h+='<div class="card"><div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn primary" onclick="doPrint()">Save as PDF</button><button class="btn danger" onclick="startOver()">Start over</button></div><p class="hint" style="margin:10px 0 0">"Save as PDF" opens your browser\'s print window — choose <b>Save as PDF</b> as the destination.</p></div>';
 
   document.getElementById("formPane").innerHTML=h;
+  pingHelper(false);
 }
 
 function custSection(k,title,introKey,itemsKey,noteKey,onKey){
@@ -1259,11 +1314,13 @@ function renderSettings(){
 
   /* AI assistant */
   h+='<div class="card"><h3 class="set-h">AI assistant</h3><p class="hint">Powers "Draft from meeting notes" on the New Agreement page.</p>';
-  h+='<div class="banner-ai"><b>Two ways to use it:</b><br>'
-    +'1. <b>Your claude.ai subscription (no key needed):</b> on the New Agreement page, click "Copy prompt for claude.ai", paste it into a chat at claude.ai, and paste Claude\'s reply back. Costs nothing extra.<br>'
-    +'2. <b>One-click with an API key:</b> paste an Anthropic API key below and the app talks to Claude directly. An API key is separate from a claude.ai subscription — create one at console.anthropic.com (pay-per-use; a typical draft costs a few cents).</div>';
-  h+='<div class="frow"><div class="field" style="flex:2"><label>Anthropic API key <span class="sub">(stored only in this browser)</span></label><input type="password" value="'+escA(state.ai.apiKey)+'" placeholder="sk-ant-…" oninput="state.ai.apiKey=this.value.trim();saveState()"></div>';
-  h+='<div class="field"><label>Model</label><input type="text" value="'+escA(state.ai.model)+'" oninput="state.ai.model=this.value.trim();saveState()"></div></div>';
+  h+='<div class="banner-ai"><b>Option A — one-click with your Claude subscription (recommended, no extra cost):</b><br>'
+    +'One-time setup: <b>1)</b> Install Claude Code from <b>claude.ai/download</b> and sign in once with your Claude account (your subscription covers it). <b>2)</b> Keep the helper files next to index.html and double-click <b>"Start TCO AI Helper"</b> (Windows: the .bat file; Mac: the .command file). <b>3)</b> Leave that window open while you work — "Draft with Claude" then runs on your subscription, no key needed.<br><br>'
+    +'<b>Option B — claude.ai in a browser tab (zero setup):</b> click "Open claude.ai with prompt" on the New Agreement page, send the prompt there, and paste Claude\'s reply back. Also uses your subscription.<br><br>'
+    +'<b>Option C — API key (pay-per-use):</b> paste an Anthropic API key below (from console.anthropic.com; a typical draft costs a few cents). Only used when the helper isn\'t running.</div>';
+  h+='<div class="addmenu" style="margin:0 0 12px"><button class="btn sm" onclick="pingHelper(true,function(){alert(helperUp?\'Helper found — one-click drafting will use your Claude subscription.\':\'Helper not detected. Double-click &quot;Start TCO AI Helper&quot; (and install Claude Code first if you have not), then try again.\');})">Test helper connection</button></div>';
+  h+='<div class="frow"><div class="field" style="flex:2"><label>Anthropic API key <span class="sub">(optional; stored only in this browser)</span></label><input type="password" value="'+escA(state.ai.apiKey)+'" placeholder="sk-ant-…" oninput="state.ai.apiKey=this.value.trim();saveState()"></div>';
+  h+='<div class="field"><label>Model <span class="sub">(API key method only)</span></label><input type="text" value="'+escA(state.ai.model)+'" oninput="state.ai.model=this.value.trim();saveState()"></div></div>';
   h+='<p class="hint" style="margin:0">Privacy note: whichever method you use, the notes you paste are sent to Anthropic (Claude) to be read. Don\'t include anything you wouldn\'t put in a Claude chat.</p></div>';
 
   /* services & packages */
@@ -1485,6 +1542,7 @@ function doPrint(){
 loadState(); loadDraft();
 applyBrand();
 renderForm(); renderPreview();
+pingHelper(true);
 </script>
 </body>
 </html>

@@ -50,20 +50,36 @@ Paste your meeting notes or a client's email (or upload a .txt file), and Claude
 them and fills in the whole agreement — services, client details, package, add-ons,
 fees, and client-specific scope points. **Always review before sending.**
 
-Two ways to connect it to Claude:
+### Option A — one-click with your Claude subscription (recommended, no extra cost)
 
-1. **Your claude.ai subscription (recommended — costs nothing extra).**
-   A claude.ai subscription can't be plugged into other apps directly, so the app does
-   the next best thing: click **"Copy prompt for claude.ai"**, paste it into a chat at
-   [claude.ai](https://claude.ai), then copy Claude's reply and paste it into the
-   **"Paste Claude's reply"** box → **Apply**. Everything fills in automatically.
-2. **One-click with an API key.** Paste an Anthropic **API key** into
-   *Settings → AI assistant* and the **"Draft with Claude"** button talks to Claude
-   directly. An API key is separate from a claude.ai subscription — create one at
-   [console.anthropic.com](https://console.anthropic.com) (pay-per-use; a typical
-   draft costs a few cents). The key is stored only in your browser.
+Your claude.ai subscription can't be plugged into other apps directly, but it **does
+include Claude Code**, which can run on your computer. The **TCO AI Helper** (included
+in this folder) uses that to give you true one-click drafting on your subscription:
 
-Privacy note: with either method, the notes you paste are sent to Anthropic (Claude)
+1. **One time:** install Claude Code from [claude.ai/download](https://claude.ai/download)
+   and sign in once with your Claude account.
+2. Keep the helper files in the same folder as `index.html`. When you want one-click
+   drafting, double-click **"Start TCO AI Helper"** (Windows: the `.bat` file;
+   Mac: the `.command` file) and leave its window open.
+3. That's it. The app shows "Connected to the Claude helper", and **Draft with Claude**
+   works in one click — billed to your subscription, no API key ever.
+
+The helper only listens on your own computer (`127.0.0.1`) — nothing is exposed to
+the network. *Settings → AI assistant → Test helper connection* confirms it's running.
+
+### Option B — claude.ai in a browser tab (zero setup)
+
+Click **"Open claude.ai with prompt"** — a claude.ai chat opens with the prompt ready
+(it's also copied to your clipboard). Send it, then copy Claude's reply into the
+**"Paste Claude's reply"** box → **Apply**. Also runs on your subscription.
+
+### Option C — API key (optional)
+
+Paste an Anthropic **API key** into *Settings → AI assistant* (from
+[console.anthropic.com](https://console.anthropic.com); pay-per-use, a typical draft
+costs a few cents). Only used when the helper isn't running.
+
+Privacy note: with every method, the notes you paste are sent to Anthropic (Claude)
 to be read — don't include anything you wouldn't put in a Claude chat.
 
 ---
