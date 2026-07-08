@@ -60,11 +60,15 @@ jobs:
           node ci/sign-mac.js "dist/mac-arm64/TCO Agreement Generator.app" "dist/mac/TCO Agreement Generator.app"
           codesign --verify --deep --strict "dist/mac-arm64/TCO Agreement Generator.app"
           codesign --verify --deep --strict "dist/mac/TCO Agreement Generator.app"
-      - name: Smoke test — launch BOTH signed apps on macOS (Intel via Rosetta)
+      - name: Smoke test — launch Apple Silicon app
         run: |
           npm install --no-save playwright-core
           node ci/smoke-mac.js "dist/mac-arm64/TCO Agreement Generator.app/Contents/MacOS/TCO Agreement Generator"
-          node ci/smoke-mac.js "dist/mac/TCO Agreement Generator.app/Contents/MacOS/TCO Agreement Generator"
+      - name: Ensure Rosetta 2 is present
+        run: |
+          arch -x86_64 /usr/bin/true 2>/dev/null || sudo softwareupdate --install-rosetta --agree-to-license
+      - name: Smoke test — launch Intel app under Rosetta
+        run: node ci/smoke-mac.js "dist/mac/TCO Agreement Generator.app/Contents/MacOS/TCO Agreement Generator"
       - name: Zip (ditto preserves bundle metadata)
         run: |
           (cd dist/mac-arm64 && ditto -c -k --sequesterRsrc --keepParent "TCO Agreement Generator.app" "../../TCO-Agreement-Generator-Mac-AppleSilicon.zip")
