@@ -43,7 +43,8 @@ jobs:
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          name: TCO Agreement Generator ${{ github.ref_name }}
+          tag_name: v1.0.0
+          name: TCO Agreement Generator v1.0.0
           body: |
             One program that does it all — agreement generator, PDF export, and
             one-click AI drafting on your Claude subscription (install Claude Code
