@@ -1,0 +1,5 @@
+ios/Resources/index.html
+ios/build/
+ios/*.xcodeproj/
+ios/authkey.p8
+ios/ExportOptions.plist

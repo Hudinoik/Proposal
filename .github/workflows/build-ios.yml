@@ -1,0 +1,112 @@
+name: Build iOS app
+
+on:
+  push:
+    branches: ['claude/download-run-machine-785jnf']
+    paths: ['ios/**', 'index.html', '.github/workflows/build-ios.yml']
+  workflow_dispatch:
+    inputs:
+      upload:
+        description: 'Upload to TestFlight (requires Apple secrets)'
+        required: false
+        default: 'false'
+
+jobs:
+  # Always: compile the app and LAUNCH it in an iPhone simulator (hard gate),
+  # so the project is known-good before any TestFlight attempt.
+  validate:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Assemble project (index.html is the app; copied, never committed)
+        run: |
+          cp index.html ios/Resources/index.html
+          cd ios && xcodegen generate
+      - name: Build for iOS Simulator
+        run: |
+          xcodebuild -project ios/TCOAgreementGenerator.xcodeproj \
+            -scheme TCOAgreementGenerator -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath ios/build build CODE_SIGNING_ALLOWED=NO
+      - name: Launch in simulator and screenshot
+        run: |
+          UDID=$(xcrun simctl list devices available -j | python3 -c "
+          import json,sys
+          d=json.load(sys.stdin)['devices']
+          print(next(dev['udid'] for k in sorted(d, reverse=True) if 'iOS' in k
+                for dev in d[k] if dev.get('isAvailable') and 'iPhone' in dev['name']))")
+          echo "Using simulator $UDID"
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl install "$UDID" "ios/build/Build/Products/Debug-iphonesimulator/TCO Agreement Generator.app"
+          xcrun simctl launch "$UDID" com.tco.agreementgenerator
+          sleep 10
+          xcrun simctl io "$UDID" screenshot ios-smoke.png
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios-smoke-screenshot
+          path: ios-smoke.png
+
+  # Only on manual dispatch with upload=true. Needs repository secrets:
+  #   APPLE_TEAM_ID          - 10-char Team ID from developer.apple.com
+  #   APPSTORE_KEY_ID        - App Store Connect API key ID
+  #   APPSTORE_ISSUER_ID     - App Store Connect issuer ID
+  #   APPSTORE_PRIVATE_KEY   - contents of the .p8 API key file
+  # Signing is fully automatic (cloud signing via the API key); the app record
+  # must exist once in App Store Connect before the first upload.
+  testflight:
+    needs: validate
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.upload == 'true'
+    runs-on: macos-26
+    env:
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APPSTORE_KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
+      APPSTORE_ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check secrets
+        run: |
+          if [ -z "$APPLE_TEAM_ID" ] || [ -z "$APPSTORE_KEY_ID" ] || [ -z "$APPSTORE_ISSUER_ID" ] || [ -z "${{ secrets.APPSTORE_PRIVATE_KEY }}" ]; then
+            echo "::error::Apple secrets are not configured (APPLE_TEAM_ID, APPSTORE_KEY_ID, APPSTORE_ISSUER_ID, APPSTORE_PRIVATE_KEY)."
+            exit 1
+          fi
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Assemble project
+        run: |
+          cp index.html ios/Resources/index.html
+          cd ios && xcodegen generate
+      - name: Write API key
+        run: printf '%s' "${{ secrets.APPSTORE_PRIVATE_KEY }}" > ios/authkey.p8
+      - name: Archive (cloud-managed automatic signing)
+        run: |
+          VERSION=$(head -1 RELEASE | tr -d 'v \r\n')
+          xcodebuild -project ios/TCOAgreementGenerator.xcodeproj \
+            -scheme TCOAgreementGenerator -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath ios/build/app.xcarchive archive \
+            MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" \
+            CODE_SIGN_STYLE=Automatic DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$PWD/ios/authkey.p8" \
+            -authenticationKeyID "$APPSTORE_KEY_ID" \
+            -authenticationKeyIssuerID "$APPSTORE_ISSUER_ID"
+      - name: Upload to TestFlight
+        run: |
+          cat > ios/ExportOptions.plist <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>teamID</key><string>$APPLE_TEAM_ID</string>
+          </dict></plist>
+          EOF
+          xcodebuild -exportArchive -archivePath ios/build/app.xcarchive \
+            -exportOptionsPlist ios/ExportOptions.plist -exportPath ios/build/out \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$PWD/ios/authkey.p8" \
+            -authenticationKeyID "$APPSTORE_KEY_ID" \
+            -authenticationKeyIssuerID "$APPSTORE_ISSUER_ID"

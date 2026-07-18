@@ -50,6 +50,16 @@ either dispatch with input `tag: vX.Y.Z`, or edit the `RELEASE` file (first line
 = tag, bump every release) and push — both build Win x64 + Mac arm64/x64 zips
 and publish a GitHub Release, which is where the user downloads the app.
 
+iOS (`ios/`): native WKWebView shell around the same index.html (CI copies it
+into `ios/Resources/` — never commit that copy). XcodeGen spec `ios/project.yml`;
+the Swift shell bridges window.print → iOS print sheet, JS dialogs, and sends
+external links to Safari. `.github/workflows/build-ios.yml`: `validate` job
+builds + launches in an iPhone simulator (hard gate, screenshot artifact);
+`testflight` job (dispatch with upload=true) archives with cloud-managed
+automatic signing and uploads — needs secrets APPLE_TEAM_ID, APPSTORE_KEY_ID,
+APPSTORE_ISSUER_ID, APPSTORE_PRIVATE_KEY, plus a one-time app record
+(bundle id com.tco.agreementgenerator) in App Store Connect.
+
 macOS facts (learned the hard way — don't regress):
 - Mac job runs on `macos-26` (match the user's OS), packages with
   electron-builder pinned to Electron 33 (`-c.electronVersion`, macOS 10.15+),
