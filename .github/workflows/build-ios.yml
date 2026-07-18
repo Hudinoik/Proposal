@@ -22,7 +22,7 @@ jobs:
         run: brew install xcodegen
       - name: Assemble project (index.html is the app; copied, never committed)
         run: |
-          cp index.html ios/Resources/index.html
+          mkdir -p ios/Resources && cp index.html ios/Resources/index.html
           cd ios && xcodegen generate
       - name: Build for iOS Simulator
         run: |
@@ -76,7 +76,7 @@ jobs:
         run: brew install xcodegen
       - name: Assemble project
         run: |
-          cp index.html ios/Resources/index.html
+          mkdir -p ios/Resources && cp index.html ios/Resources/index.html
           cd ios && xcodegen generate
       - name: Write API key
         run: printf '%s' "${{ secrets.APPSTORE_PRIVATE_KEY }}" > ios/authkey.p8
