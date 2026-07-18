@@ -1,2 +1,2 @@
-v1.1.3
-build 4 (Fix and Open helper in mac zips)
+v1.1.4
+build 5 (Mac helper re-signs the app locally — needed on macOS 26.5+)

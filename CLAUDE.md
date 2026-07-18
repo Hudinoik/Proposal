@@ -57,7 +57,10 @@ macOS facts (learned the hard way — don't regress):
   `codesign --deep` breaks helpers), then `ci/smoke-mac.js` must LAUNCH the
   arm64 app before release (hard gate; Intel-under-Rosetta check is best-effort).
 - Ad-hoc-signed apps crash at launch on DOWNLOADED (quarantined) copies:
-  dyld "different Team IDs" refusing Electron Framework. User-side fix is
-  `xattr -cr` — shipped as "Fix and Open (Mac).command" inside each Mac zip
-  (source: `ci/fix-and-open-command.sh`). The real fix would be Developer ID
-  signing + notarization (needs Apple Developer Program).
+  dyld "different Team IDs" refusing Electron Framework. On macOS 26.5+
+  `xattr -cr` alone is NOT enough (confirmed on user's 26.5.2) — the app must
+  also be re-signed locally with `codesign --force --deep --sign -`. Both steps
+  ship in "Fix and Open (Mac).command" inside each Mac zip (source:
+  `ci/fix-and-open-command.sh`; the blunt local --deep re-sign is fine because
+  it drops hardened runtime, unlike CI signing). The real fix would be
+  Developer ID signing + notarization (needs Apple Developer Program).

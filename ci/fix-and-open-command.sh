@@ -18,6 +18,11 @@ echo "Installing into Applications..."
 rm -rf "/Applications/$APP"
 cp -Rp "$APP" /Applications/
 xattr -cr "/Applications/$APP" 2>/dev/null || true
+# macOS 26.5+ still refuses the downloaded app's Electron Framework after the
+# quarantine flag is cleared (dyld "different Team IDs"). A fresh local ad-hoc
+# signature makes macOS treat the app as built on this Mac, which it accepts.
+echo "Re-stamping the app for this Mac..."
+codesign --force --deep --sign - "/Applications/$APP" 2>/dev/null || true
 echo "Opening the app..."
 open "/Applications/$APP"
 echo
