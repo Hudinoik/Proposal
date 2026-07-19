@@ -190,7 +190,8 @@
   .pdfmode .topbar,.pdfmode .pane-form,.pdfmode .settings-wrap,.pdfmode #viewClients,.pdfmode .actionbar{display:none !important}
   .pdfmode .layout{display:block;padding:0;gap:0}
   .pdfmode .pane-preview{position:static;max-height:none;overflow:visible;background:#fff;padding:0;border-radius:0}
-  .pdfmode .doc.page{margin:0;box-shadow:none}
+  .pdfmode .doc.page{display:none}
+  .pdfmode .doc.page.pdfshot{display:flex;margin:0;box-shadow:none}
 
   /* ============ PRINT ============ */
   /* zero page margin: the navy banner/footer bands run edge to edge like
@@ -1481,6 +1482,27 @@ function paginateDoc(band,fband,contentHTML){
     out+='<div class="doc page"><div class="pg-band">'+band+'</div><div class="pbody">'+pages[p]+'</div><div class="pg-foot">'+fband+'</div></div>';
   }
   return out+'</div>';
+}
+/* native-shell PDF capture: show exactly one page at a time at the origin */
+function tcoPdfPrep(){
+  var pages=document.querySelectorAll('.doc.page');
+  if(!pages.length) return 0;
+  document.body.classList.add('pdfmode');
+  var pg=document.querySelector('.pages'); if(pg) pg.style.zoom='';
+  window.scrollTo(0,0);
+  return pages.length;
+}
+function tcoPdfShow(i){
+  var pages=document.querySelectorAll('.doc.page');
+  for(var k=0;k<pages.length;k++) pages[k].classList.toggle('pdfshot', k===i);
+  window.scrollTo(0,0);
+}
+function tcoPdfDone(){
+  document.body.classList.remove('pdfmode');
+  var pages=document.querySelectorAll('.doc.page');
+  for(var k=0;k<pages.length;k++) pages[k].classList.remove('pdfshot');
+  window.scrollTo(0,0);
+  if(window.fitPreviewPages) fitPreviewPages();
 }
 /* scale the page stack down to the preview pane's width (screen only) */
 function fitPreviewPages(){

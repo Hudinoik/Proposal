@@ -77,11 +77,7 @@ class ViewController: UIViewController, WKUIDelegate, WKNavigationDelegate, WKSc
   }
 
   private func exportPagesPDF() {
-    let prep = "(function(){var n=document.querySelectorAll('.doc.page').length;" +
-               "if(n>0){document.body.classList.add('pdfmode');" +
-               "var pg=document.querySelector('.pages'); if(pg) pg.style.zoom='';" +
-               "window.scrollTo(0,0);}return n;})()"
-    webView.evaluateJavaScript(prep) { res, _ in
+    webView.evaluateJavaScript("tcoPdfPrep()") { res, _ in
       let n = (res as? NSNumber)?.intValue ?? 0
       guard n > 0 else { return }
       // size the web view to exactly one sheet; with inset adjustment
@@ -99,18 +95,19 @@ class ViewController: UIViewController, WKUIDelegate, WKNavigationDelegate, WKSc
 
   private func snapshotPage(_ i: Int, of n: Int, collected: [Data]) {
     if i >= n { finishExport(collected); return }
-    // position page i at the top of the viewport via the scroll view directly
-    // (setContentOffset, not JS scrolling, so nothing can reinterpret it)
-    webView.scrollView.setContentOffset(CGPoint(x: 0, y: CGFloat(i) * 1056), animated: false)
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-      let cfg = WKSnapshotConfiguration()
-      cfg.rect = CGRect(x: 0, y: 0, width: 816, height: 1056)
-      cfg.afterScreenUpdates = true
-      cfg.snapshotWidth = 1632   // 2x for crisp text in the PDF
-      self.webView.takeSnapshot(with: cfg) { image, _ in
-        var arr = collected
-        if let jpg = image?.jpegData(compressionQuality: 0.88) { arr.append(jpg) }
-        self.snapshotPage(i + 1, of: n, collected: arr)
+    // isolate page i: it is the only page in the document, at the origin —
+    // no scrolling, no position math, nothing that can drift
+    webView.evaluateJavaScript("tcoPdfShow(\(i))") { _, _ in
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+        let cfg = WKSnapshotConfiguration()
+        cfg.rect = CGRect(x: 0, y: 0, width: 816, height: 1056)
+        cfg.afterScreenUpdates = true
+        cfg.snapshotWidth = 1632   // 2x for crisp text in the PDF
+        self.webView.takeSnapshot(with: cfg) { image, _ in
+          var arr = collected
+          if let jpg = image?.jpegData(compressionQuality: 0.88) { arr.append(jpg) }
+          self.snapshotPage(i + 1, of: n, collected: arr)
+        }
       }
     }
   }
@@ -121,9 +118,7 @@ class ViewController: UIViewController, WKUIDelegate, WKNavigationDelegate, WKSc
     trailingC?.isActive = true
     bottomC?.isActive = true
     view.layoutIfNeeded()
-    webView.evaluateJavaScript(
-      "document.body.classList.remove('pdfmode'); window.scrollTo(0,0); if (window.fitPreviewPages) fitPreviewPages();",
-      completionHandler: nil)
+    webView.evaluateJavaScript("tcoPdfDone()", completionHandler: nil)
   }
 
   private func finishExport(_ pages: [Data]) {
