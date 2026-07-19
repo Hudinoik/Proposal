@@ -744,8 +744,16 @@ function aiApplyPasted(){
 var HELPER_URL="http://127.0.0.1:8765";
 var helperUp=false, nativeClaude=false, lastPing=0;
 function isNative(){ return typeof window!=="undefined" && !!window.tcoNative; }
+/* the iPhone/iPad/Mac App Store shells (WKWebView with our message bridge) */
+function isAppleApp(){ return typeof window!=="undefined" && !!(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.printPage); }
 function paintAIConn(){
   var el=document.getElementById("aiConn"); if(!el) return;
+  if(isAppleApp()){
+    if(state.ai.apiKey) el.innerHTML='&#9679; Claude API key saved — one-tap drafting is ready.';
+    else if(state.ai.deepseekKey) el.innerHTML='&#9679; DeepSeek API key saved — one-tap drafting is ready.';
+    else el.innerHTML='&#9675; For one-tap drafting, add a Claude or DeepSeek API key in Settings → AI assistant. Zero-setup alternative: "Open claude.ai with prompt".';
+    return;
+  }
   if(isNative()){
     if(nativeClaude) el.innerHTML='&#9679; Claude Code detected — one-click drafting runs on your Claude subscription.';
     else el.innerHTML='&#9675; For one-click drafting, install <b>Claude Code</b> from claude.ai/download and sign in once with your Claude account (your subscription covers it). Zero-setup alternative: "Open claude.ai with prompt".';
@@ -756,6 +764,7 @@ function paintAIConn(){
   else el.innerHTML='&#9675; To draft in one click, use the desktop app or start the Claude helper (see Settings → AI assistant). Zero-setup alternative: "Open claude.ai with prompt".';
 }
 function pingHelper(force,cb){
+  if(isAppleApp()){ helperUp=false; nativeClaude=false; paintAIConn(); if(cb)cb(); return; }
   if(isNative()){
     window.tcoNative.check().then(function(ok){ nativeClaude=!!ok; paintAIConn(); if(cb)cb(); })
       ["catch"](function(){ nativeClaude=false; paintAIConn(); if(cb)cb(); });
@@ -843,6 +852,24 @@ function apiDraft(prompt,done){
     else if(/Failed to fetch|NetworkError|CSP|blocked/i.test(msg)) aiStatus('Couldn\'t reach the Claude API from here. Use the Claude helper or "Open claude.ai with prompt" instead.',"err");
     else aiStatus("Something went wrong: "+msg,"err");
   }).then(function(){ if(done) done(); });
+}
+function testAIKey(){
+  if(state.ai.apiKey){
+    fetch("https://api.anthropic.com/v1/models",{headers:{
+      "x-api-key":state.ai.apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"
+    }}).then(function(r){
+      alert(r.ok?"Your Claude API key works — one-tap drafting is ready.":"Claude said no to that key (error "+r.status+"). Check it was copied completely from console.anthropic.com.");
+    }).catch(function(){ alert("Couldn't reach Claude's servers — check your internet connection and try again."); });
+    return;
+  }
+  if(state.ai.deepseekKey){
+    fetch("https://api.deepseek.com/models",{headers:{"authorization":"Bearer "+state.ai.deepseekKey}})
+    .then(function(r){
+      alert(r.ok?"Your DeepSeek API key works — one-tap drafting is ready.":"DeepSeek said no to that key (error "+r.status+"). Check it was copied completely from platform.deepseek.com.");
+    }).catch(function(){ alert("Couldn't reach DeepSeek's servers — check your internet connection and try again."); });
+    return;
+  }
+  alert("No API key saved yet — paste a Claude or DeepSeek key in the fields below first.");
 }
 function deepseekDraft(prompt,done){
   fetch("https://api.deepseek.com/chat/completions",{
@@ -999,13 +1026,13 @@ function renderForm(){
   var h="";
 
   /* --- AI assist --- */
-  h+='<div class="card" id="aiCard">'+stepH("&nbsp;","Draft from meeting notes")+'<p class="hint">Optional. Paste notes from a meeting or a client\'s message — Claude reads them and fills in the whole agreement below (services, client, package, fees). Review everything before sending.</p>';
+  h+='<div class="card" id="aiCard">'+stepH("&nbsp;","Draft from meeting notes")+'<p class="hint">Optional. Paste notes from a meeting or a client\'s message — or record a voice note — and the AI fills in the whole agreement below (services, client, package, fees). Review everything before sending.</p>';
   if(draft&&draft.aiNote){
     h+='<div class="banner-ai"><b>Drafted from your notes.</b> '+esc(draft.aiNote)+' <button class="btn sm quiet" onclick="draft.aiNote=\'\';dirty(true)" style="margin-left:6px">Dismiss</button></div>';
   }
   h+='<div class="field w100"><textarea id="aiNotes" style="min-height:96px" placeholder="Paste meeting notes or the client\'s email here…"></textarea></div>';
   h+='<div class="addmenu">';
-  h+='<button class="btn primary sm" id="aiApiBtn" onclick="aiDraft()">Draft with Claude</button>';
+  h+='<button class="btn primary sm" id="aiApiBtn" onclick="aiDraft()">Draft with AI</button>';
   h+='<button class="btn sm" onclick="aiOpenClaude()">Open claude.ai with prompt</button>';
   h+='<label class="btn sm" style="display:inline-flex;align-items:center;cursor:pointer">Upload notes (.txt)<input type="file" accept=".txt,.md,.text,text/plain" style="display:none" onchange="aiUpload(this)"></label>';
   h+='<button class="btn sm" id="aiVoiceBtn" onclick="toggleVoice()">'+svgMic()+' Voice note</button>';
@@ -1550,8 +1577,12 @@ function renderSettings(){
   h+='<div class="field"><label>Accent color (green)</label><input type="color" value="'+escA(c.colorAccent)+'" style="height:40px;padding:2px" oninput="updCo(\'colorAccent\',this.value)"></div></div></div>';
 
   /* AI assistant */
-  h+='<div class="card"><h3 class="set-h">AI assistant</h3><p class="hint">Powers "Draft from meeting notes" on the New Agreement page.</p>';
-  if(isNative()){
+  h+='<div class="card"><h3 class="set-h">AI assistant</h3><p class="hint">Powers "Draft from meeting notes" and voice notes on the New Agreement page.</p>';
+  if(isAppleApp()){
+    h+='<div class="banner-ai"><b>Option A — API key (one-tap drafting):</b> paste a <b>Claude</b> key (console.anthropic.com) or a <b>DeepSeek</b> key (platform.deepseek.com) below. A typical draft costs a few cents; the key stays on this device.<br><br>'
+      +'<b>Option B — claude.ai (zero setup, uses your Claude subscription):</b> tap "Open claude.ai with prompt" on the New Agreement page, send the prompt there, and paste Claude\'s reply back.</div>';
+    h+='<div class="addmenu" style="margin:0 0 12px"><button class="btn sm" onclick="testAIKey()">Test AI key</button></div>';
+  } else if(isNative()){
     h+='<div class="banner-ai"><b>Option A — one-click with your Claude subscription (recommended, no extra cost):</b><br>'
       +'One-time setup: install <b>Claude Code</b> from <b>claude.ai/download</b> and sign in once with your Claude account (your subscription covers it). That\'s it — "Draft with Claude" then works in one click, no key needed.<br><br>'
       +'<b>Option B — claude.ai in a browser tab (zero setup):</b> click "Open claude.ai with prompt" on the New Agreement page, send the prompt there, and paste Claude\'s reply back. Also uses your subscription.<br><br>'
