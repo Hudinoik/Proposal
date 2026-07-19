@@ -89,6 +89,34 @@ jobs:
           cd ios && xcodegen generate
       - name: Write API key
         run: printf '%s' "${{ secrets.APPSTORE_PRIVATE_KEY }}" > ios/authkey.p8
+      # Explicitly register the bundle ID in the Developer Portal so it shows
+      # up in App Store Connect's New App dropdown (cloud signing alone has
+      # been seen to leave it unregistered). 409 = already registered = fine.
+      - name: Register bundle ID
+        run: |
+          pip3 install --quiet --break-system-packages PyJWT cryptography || pip3 install --quiet PyJWT cryptography
+          python3 - <<'EOF'
+          import time, jwt, json, urllib.request, os, sys
+          key = open('ios/authkey.p8').read()
+          token = jwt.encode(
+              {"iss": os.environ["APPSTORE_ISSUER_ID"], "iat": int(time.time()) - 30,
+               "exp": int(time.time()) + 1200, "aud": "appstoreconnect-v1"},
+              key, algorithm="ES256", headers={"kid": os.environ["APPSTORE_KEY_ID"]})
+          body = json.dumps({"data": {"type": "bundleIds", "attributes": {
+              "identifier": "com.tco.agreementgenerator",
+              "name": "TCO Agreement Generator", "platform": "IOS"}}}).encode()
+          req = urllib.request.Request(
+              "https://api.appstoreconnect.apple.com/v1/bundleIds", data=body,
+              headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"})
+          try:
+              print("registered:", urllib.request.urlopen(req).status)
+          except urllib.error.HTTPError as e:
+              detail = e.read().decode()
+              if e.code == 409 and "already" in detail.lower():
+                  print("already registered - ok")
+              else:
+                  print("HTTP", e.code, detail); sys.exit(1)
+          EOF
       - name: Archive (cloud-managed automatic signing)
         run: |
           VERSION=$(head -1 RELEASE | tr -d 'v \r\n')
