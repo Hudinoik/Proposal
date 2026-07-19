@@ -92,8 +92,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKUIDelegate, WKNavigationDe
   }
 
   private func exportPagesPDF() {
+    // scale the page stack to exactly the window width during capture, so the
+    // captured area and the sheets are the same width -> true edge-to-edge
     let prep = "(function(){var n=document.querySelectorAll('.doc.page').length;" +
-               "if(n>0){document.body.classList.add('pdfmode');window.scrollTo(0,0);}return n;})()"
+               "if(n>0){document.body.classList.add('pdfmode');" +
+               "document.querySelector('.pages').style.zoom=(window.innerWidth/816);" +
+               "window.scrollTo(0,0);}return n;})()"
     webView.evaluateJavaScript(prep) { res, _ in
       let n = (res as? NSNumber)?.intValue ?? 0
       guard n > 0 else { return }
