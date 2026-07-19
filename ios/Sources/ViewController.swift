@@ -27,6 +27,10 @@ class ViewController: UIViewController, WKUIDelegate, WKNavigationDelegate, WKSc
     webView.uiDelegate = self
     webView.navigationDelegate = self
     webView.translatesAutoresizingMaskIntoConstraints = false
+    webView.scrollView.bounces = false
+    webView.scrollView.alwaysBounceVertical = false
+    webView.scrollView.alwaysBounceHorizontal = false
+    webView.scrollView.showsHorizontalScrollIndicator = false
     view.addSubview(webView)
     NSLayoutConstraint.activate([
       webView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),

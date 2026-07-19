@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
 <title>TCO Agreement Generator</title>
 <style>
   :root{
@@ -22,8 +22,9 @@
     --radius:6px;
   }
   *{box-sizing:border-box}
-  html,body{margin:0;padding:0}
+  html,body{margin:0;padding:0;overscroll-behavior:none;-webkit-text-size-adjust:100%}
   body{font-family:"Segoe UI",system-ui,-apple-system,Roboto,"Helvetica Neue",Arial,sans-serif;background:var(--bg);color:var(--ink);font-size:15px;line-height:1.5}
+  button,input,select,textarea,.svc-card{touch-action:manipulation}
 
   /* ============ APP CHROME ============ */
   .topbar{background:var(--navy);color:#fff;display:flex;align-items:center;gap:14px;padding:10px 22px;position:sticky;top:0;z-index:50;border-bottom:3px solid var(--lime)}
@@ -57,6 +58,7 @@
     .pane-form{max-width:none;min-width:0;width:100%}
     .pane-preview{position:static;max-height:none;width:100%}
   }
+
 
   .card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:20px 22px;margin-bottom:14px}
   .step-h{display:flex;align-items:baseline;gap:10px;margin:0 0 3px}
@@ -167,6 +169,35 @@
     .layout{display:block;padding:0}
     .pane-preview{position:static;max-height:none;overflow:visible;background:#fff;padding:0;box-shadow:none;border-radius:0}
     .doc{box-shadow:none;max-width:none;padding:0;margin:0}
+  }
+
+  /* ============ PHONES ============ */
+  @media (max-width:700px){
+    body{overflow-x:hidden}
+    /* top bar becomes two rows: logo + title, then full-width tabs + PDF */
+    .topbar{flex-wrap:wrap;gap:8px 10px;padding:10px 12px}
+    .topbar img.logo{height:32px;width:32px}
+    .topbar .tt{flex:1 1 70%;min-width:0}
+    .topbar .tt b{font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .topbar .tt span{display:none}
+    .topbar .spacer{display:none}
+    .tabs{flex:1 1 auto;margin-right:0}
+    .topbar>.btn.accent{flex:0 0 auto}
+    .tabs button{flex:1;padding:13px 8px;font-size:13px;white-space:nowrap}
+    .topbar>.btn.accent{padding:13px 15px;font-size:14px;white-space:nowrap}
+    /* comfortable touch targets */
+    .btn{padding:12px 16px;font-size:14.5px}
+    .btn.sm{padding:11px 14px;font-size:14px}
+    input[type=text],input[type=number],input[type=date],input[type=email],input[type=password],select,textarea{font-size:16px;padding:10px 12px}
+    .checkline{margin:9px 0}
+    .checkline input,input[type=checkbox]{width:19px;height:19px}
+    .svc-card{padding:15px 13px}
+    /* tighter page furniture so content gets the width */
+    .layout{padding:10px;gap:14px}
+    .card{padding:16px 14px}
+    .pane-preview{padding:10px}
+    .doc{padding:26px 20px}
+    .settings-wrap{padding:10px}
   }
 </style>
 </head>
