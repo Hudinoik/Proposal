@@ -46,18 +46,38 @@ class ViewController: UIViewController, WKUIDelegate, WKNavigationDelegate, WKSc
 
   override var preferredStatusBarStyle: UIStatusBarStyle { .lightContent }
 
-  // MARK: window.print() -> print sheet
+  // MARK: window.print() -> render a real PDF and open the share sheet
+  // (Save to Files, WhatsApp, Mail, AirDrop…). The app sets document.title
+  // to "<client> - <agreement>" right before printing, so use it as the
+  // file name. Letter size, zero margins: the letterhead bands are
+  // full-bleed and .pg-body supplies the text margins.
 
   func userContentController(_ userContentController: WKUserContentController,
                              didReceive message: WKScriptMessage) {
     guard message.name == "printPage" else { return }
-    let printController = UIPrintInteractionController.shared
-    let info = UIPrintInfo(dictionary: nil)
-    info.outputType = .general
-    info.jobName = "TCO Agreement"
-    printController.printInfo = info
-    printController.printFormatter = webView.viewPrintFormatter()
-    printController.present(animated: true, completionHandler: nil)
+    let raw = (webView.title?.isEmpty == false ? webView.title! : "TCO Agreement")
+    let name = raw.components(separatedBy: CharacterSet(charactersIn: "/\\:*?\"<>|")).joined()
+    let page = CGRect(x: 0, y: 0, width: 612, height: 792)
+    let renderer = UIPrintPageRenderer()
+    renderer.addPrintFormatter(webView.viewPrintFormatter(), startingAtPageAt: 0)
+    renderer.setValue(page, forKey: "paperRect")
+    renderer.setValue(page, forKey: "printableRect")
+    let data = NSMutableData()
+    UIGraphicsBeginPDFContextToData(data, page, nil)
+    for i in 0..<renderer.numberOfPages {
+      UIGraphicsBeginPDFPage()
+      renderer.drawPage(at: i, in: UIGraphicsGetPDFContextBounds())
+    }
+    UIGraphicsEndPDFContext()
+    let url = FileManager.default.temporaryDirectory.appendingPathComponent(name + ".pdf")
+    do { try data.write(to: url, options: .atomic) } catch { return }
+    let share = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+    if let pop = share.popoverPresentationController {   // iPad requires an anchor
+      pop.sourceView = view
+      pop.sourceRect = CGRect(x: view.bounds.midX, y: view.bounds.midY, width: 0, height: 0)
+      pop.permittedArrowDirections = []
+    }
+    present(share, animated: true)
   }
 
   // MARK: external links -> Safari
