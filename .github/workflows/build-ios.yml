@@ -48,6 +48,19 @@ jobs:
         with:
           name: ios-smoke-screenshot
           path: ios-smoke.png
+      - name: Build Mac app (unsigned)
+        run: |
+          xcodebuild -project ios/TCOAgreementGenerator.xcodeproj \
+            -scheme TCOAgreementGeneratorMac -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath ios/build build CODE_SIGNING_ALLOWED=NO
+      - name: Launch Mac app (must stay alive 8s)
+        run: |
+          BIN="ios/build/Build/Products/Debug/TCO Agreement Generator.app/Contents/MacOS/TCO Agreement Generator"
+          "$BIN" & PID=$!
+          sleep 8
+          kill -0 $PID
+          kill $PID
 
   # Only on manual dispatch with upload=true. Needs repository secrets:
   #   APPLE_TEAM_ID          - 10-char Team ID from developer.apple.com
@@ -143,6 +156,27 @@ jobs:
           EOF
           xcodebuild -exportArchive -archivePath ios/build/app.xcarchive \
             -exportOptionsPlist ios/ExportOptions.plist -exportPath ios/build/out \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$PWD/ios/authkey.p8" \
+            -authenticationKeyID "$APPSTORE_KEY_ID" \
+            -authenticationKeyIssuerID "$APPSTORE_ISSUER_ID"
+      # Requires the macOS platform to be added to the app record in
+      # App Store Connect (one-time, on the app's page: + -> macOS).
+      - name: Archive and upload Mac app to TestFlight
+        run: |
+          VERSION=$(head -1 RELEASE | tr -d 'v \r\n')
+          xcodebuild -project ios/TCOAgreementGenerator.xcodeproj \
+            -scheme TCOAgreementGeneratorMac -configuration Release \
+            -destination 'generic/platform=macOS' \
+            -archivePath ios/build/mac.xcarchive archive \
+            MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" \
+            CODE_SIGN_STYLE=Automatic DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$PWD/ios/authkey.p8" \
+            -authenticationKeyID "$APPSTORE_KEY_ID" \
+            -authenticationKeyIssuerID "$APPSTORE_ISSUER_ID"
+          xcodebuild -exportArchive -archivePath ios/build/mac.xcarchive \
+            -exportOptionsPlist ios/ExportOptions.plist -exportPath ios/build/outmac \
             -allowProvisioningUpdates \
             -authenticationKeyPath "$PWD/ios/authkey.p8" \
             -authenticationKeyID "$APPSTORE_KEY_ID" \
