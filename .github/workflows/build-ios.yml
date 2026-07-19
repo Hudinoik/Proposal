@@ -112,8 +112,8 @@ jobs:
               print("registered:", urllib.request.urlopen(req).status)
           except urllib.error.HTTPError as e:
               detail = e.read().decode()
-              if e.code == 409 and "already" in detail.lower():
-                  print("already registered - ok")
+              if e.code == 409:
+                  print("already registered - ok:", detail)
               else:
                   print("HTTP", e.code, detail); sys.exit(1)
           EOF
