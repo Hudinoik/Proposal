@@ -102,6 +102,35 @@ jobs:
           cd ios && xcodegen generate
       - name: Write API key
         run: printf '%s' "${{ secrets.APPSTORE_PRIVATE_KEY }}" > ios/authkey.p8
+      # Cloud signing creates fresh certificates on every (ephemeral) runner,
+      # and Apple caps how many an account may hold — prune ours first.
+      # Revoking them does not affect builds already uploaded to TestFlight.
+      - name: Prune old signing certificates
+        run: |
+          pip3 install --quiet --break-system-packages PyJWT cryptography || pip3 install --quiet PyJWT cryptography
+          python3 - <<'EOF'
+          import time, jwt, json, urllib.request, os
+          key = open('ios/authkey.p8').read()
+          token = jwt.encode(
+              {"iss": os.environ["APPSTORE_ISSUER_ID"], "iat": int(time.time()) - 30,
+               "exp": int(time.time()) + 1200, "aud": "appstoreconnect-v1"},
+              key, algorithm="ES256", headers={"kid": os.environ["APPSTORE_KEY_ID"]})
+          def req(method, path):
+              r = urllib.request.Request("https://api.appstoreconnect.apple.com" + path,
+                                         method=method, headers={"Authorization": "Bearer " + token})
+              return urllib.request.urlopen(r)
+          certs = json.load(req("GET", "/v1/certificates?limit=200")).get("data", [])
+          kill = {"DEVELOPMENT","DISTRIBUTION","IOS_DEVELOPMENT","IOS_DISTRIBUTION",
+                  "MAC_APP_DISTRIBUTION","MAC_INSTALLER_DISTRIBUTION"}
+          n = 0
+          for c in certs:
+              if c["attributes"]["certificateType"] in kill:
+                  try:
+                      req("DELETE", "/v1/certificates/" + c["id"]); n += 1
+                  except Exception as e:
+                      print("could not revoke", c["id"], e)
+          print("revoked", n, "of", len(certs), "certificates")
+          EOF
       # Explicitly register the bundle ID in the Developer Portal so it shows
       # up in App Store Connect's New App dropdown (cloud signing alone has
       # been seen to leave it unregistered). 409 = already registered = fine.
