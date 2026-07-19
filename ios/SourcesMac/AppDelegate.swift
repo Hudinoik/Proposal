@@ -1,5 +1,7 @@
 import Cocoa
 import WebKit
+import Speech
+import AVFoundation
 
 /* Native macOS shell around index.html for Mac App Store / TestFlight
    distribution (the website-download Mac app remains the Electron build).
@@ -17,6 +19,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKUIDelegate, WKNavigationDe
     let printOverride = "window.print = function(){ window.webkit.messageHandlers.printPage.postMessage(''); };"
     controller.addUserScript(WKUserScript(source: printOverride, injectionTime: .atDocumentStart, forMainFrameOnly: true))
     controller.add(self, name: "printPage")
+    controller.add(self, name: "voiceStart")
+    controller.add(self, name: "voiceStop")
 
     let config = WKWebViewConfiguration()
     config.userContentController = controller
@@ -78,6 +82,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKUIDelegate, WKNavigationDe
 
   func userContentController(_ userContentController: WKUserContentController,
                              didReceive message: WKScriptMessage) {
+    if message.name == "voiceStart" { startVoice(); return }
+    if message.name == "voiceStop" { stopVoice(); return }
     guard message.name == "printPage" else { return }
     let info = NSPrintInfo()
     info.topMargin = 0; info.bottomMargin = 0; info.leftMargin = 0; info.rightMargin = 0
@@ -89,6 +95,84 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKUIDelegate, WKNavigationDe
     // WKWebView's print operation renders empty unless the view gets a frame
     op.view?.frame = webView.bounds
     op.runModal(for: window, delegate: nil, didRun: nil, contextInfo: nil)
+  }
+
+  // MARK: voice notes — live on-device speech recognition streamed to the page
+
+  private let speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
+  private var audioEngine: AVAudioEngine?
+  private var recRequest: SFSpeechAudioBufferRecognitionRequest?
+  private var recTask: SFSpeechRecognitionTask?
+  private var voiceActive = false
+  private var lastTranscript = ""
+
+  private func jsCall(_ fn: String, _ text: String) {
+    guard let data = try? JSONSerialization.data(withJSONObject: [text]),
+          let arr = String(data: data, encoding: .utf8) else { return }
+    webView.evaluateJavaScript("window.\(fn)(\(arr)[0])", completionHandler: nil)
+  }
+
+  private func startVoice() {
+    SFSpeechRecognizer.requestAuthorization { auth in
+      DispatchQueue.main.async {
+        guard auth == .authorized else {
+          self.jsCall("tcoVoiceError", "Speech recognition permission was declined. Enable it in System Settings > Privacy & Security."); return
+        }
+        AVCaptureDevice.requestAccess(for: .audio) { ok in
+          DispatchQueue.main.async {
+            guard ok else {
+              self.jsCall("tcoVoiceError", "Microphone permission was declined. Enable it in System Settings > Privacy & Security."); return
+            }
+            self.beginRecording()
+          }
+        }
+      }
+    }
+  }
+
+  private func beginRecording() {
+    guard let recognizer = speechRecognizer, recognizer.isAvailable else {
+      jsCall("tcoVoiceError", "Speech recognition isn't available on this Mac right now."); return
+    }
+    let engine = AVAudioEngine()
+    let request = SFSpeechAudioBufferRecognitionRequest()
+    request.shouldReportPartialResults = true
+    let input = engine.inputNode
+    input.installTap(onBus: 0, bufferSize: 1024, format: input.outputFormat(forBus: 0)) { buffer, _ in
+      request.append(buffer)
+    }
+    engine.prepare()
+    do { try engine.start() } catch { jsCall("tcoVoiceError", "Could not start the microphone."); return }
+
+    audioEngine = engine
+    recRequest = request
+    voiceActive = true
+    lastTranscript = ""
+    recTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
+      guard let self = self else { return }
+      DispatchQueue.main.async {
+        if let r = result {
+          self.lastTranscript = r.bestTranscription.formattedString
+          if r.isFinal { self.finishVoice(); return }
+          if self.voiceActive { self.jsCall("tcoVoicePartial", self.lastTranscript) }
+        }
+        if error != nil { self.finishVoice() }
+      }
+    }
+  }
+
+  private func stopVoice() {
+    recRequest?.endAudio()
+    audioEngine?.stop()
+  }
+
+  private func finishVoice() {
+    guard voiceActive else { return }
+    voiceActive = false
+    audioEngine?.stop()
+    audioEngine?.inputNode.removeTap(onBus: 0)
+    audioEngine = nil; recRequest = nil; recTask = nil
+    jsCall("tcoVoiceFinal", lastTranscript)
   }
 
   // MARK: external links -> default browser

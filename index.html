@@ -287,7 +287,7 @@ function defaults(){
       logo:LOGO_DEFAULT,
       colorPrimary:"#052B6A", colorAccent:"#8EB91A"
     },
-    ai:{ apiKey:"", model:"claude-sonnet-5" },
+    ai:{ apiKey:"", model:"claude-sonnet-5", deepseekKey:"" },
     paymentTermsDefault:"Payments will be charged to the approved payment method on file unless otherwise agreed.\nServices may be paused if invoices remain unpaid or payment terms are not met.",
     acceptance:"By signing below, both parties acknowledge that they have read, understood, and agree to the terms of this Agreement.",
     additionalServicesBody:"Services requested outside the scope of this Agreement will be billed separately at TCO's standard rates unless otherwise agreed in writing.",
@@ -511,7 +511,8 @@ function loadState(){
 }
 function migrateState(){
   var changed=false;
-  if(!state.ai){ state.ai={apiKey:"",model:"claude-sonnet-5"}; changed=true; }
+  if(!state.ai){ state.ai={apiKey:"",model:"claude-sonnet-5",deepseekKey:""}; changed=true; }
+  if(state.ai.deepseekKey===undefined){ state.ai.deepseekKey=""; changed=true; }
   /* older installs saved empty contact fields — fill them so the document
      header/footer bands (added later) aren't blank */
   var cdef=defaults().company;
@@ -664,9 +665,22 @@ function catalogForAI(){
   });
   return out;
 }
+function currentStateForAI(){
+  if(!draft) return "";
+  var cur={
+    services:draft.serviceIds,
+    client:draft.client,
+    packageIds:draft.fees.filter(function(f){return f.type==="package";}).map(function(f){return f.packageId;}),
+    fees:draft.fees.filter(function(f){return f.type!=="package";}).map(function(f){return {type:f.type,label:f.label,amount:f.amount,unit:f.unit||"",desc:f.desc||""};})
+  };
+  return "\nCURRENT AGREEMENT (already drafted). The notes below may simply request CHANGES to it — e.g. a different fee, an extra service, a new client detail:\n"
+    + JSON.stringify(cur)
+    + "\nIf the notes request changes, reply with the FULL updated JSON in the required shape: start from the current agreement above, apply the requested changes, and keep everything that was not mentioned exactly as it is.\n\n";
+}
 function buildAIPrompt(notes){
   return "You are helping prepare a client service agreement for TCO (The Contractors Office), a bookkeeping and office-services firm. Read the meeting notes / client message below and extract the details needed to draft the agreement.\n\n"
   + catalogForAI()
+  + currentStateForAI()
   + "\nReply with ONLY a JSON object (no markdown, no commentary) in exactly this shape:\n"
   + '{\n'
   + '  "services": ["bk"],                    // 1 or more service codes from the list above; use "other" if nothing fits\n'
@@ -765,14 +779,20 @@ function aiDraft(){
   var btn=document.getElementById("aiApiBtn"); if(btn) btn.disabled=true;
   var done=function(){ var b=document.getElementById("aiApiBtn"); if(b) b.disabled=false; };
   var tryApi=function(){
-    if(!state.ai.apiKey){
-      aiStatus(isNative()
-        ? 'One-click drafting needs Claude Code: install it from claude.ai/download and sign in once with your Claude account (your subscription covers it). Zero-setup: click "Open claude.ai with prompt".'
-        : 'One-click drafting needs the Claude helper running (your subscription — see Settings → AI assistant) or an API key. Zero-setup: click "Open claude.ai with prompt".',"err");
-      done(); return;
+    if(state.ai.apiKey){
+      aiStatus("Drafting with Claude via your API key…");
+      apiDraft(prompt, done);
+      return;
     }
-    aiStatus("Drafting with Claude via your API key…");
-    apiDraft(prompt, done);
+    if(state.ai.deepseekKey){
+      aiStatus("Drafting with DeepSeek via your API key…");
+      deepseekDraft(prompt, done);
+      return;
+    }
+    aiStatus(isNative()
+      ? 'One-click drafting needs Claude Code (install from claude.ai/download, sign in once — your subscription covers it) or an API key in Settings → AI assistant (Claude or DeepSeek). Zero-setup: click "Open claude.ai with prompt".'
+      : 'One-click drafting needs the Claude helper running (your subscription — see Settings → AI assistant) or an API key (Claude or DeepSeek). Zero-setup: click "Open claude.ai with prompt".',"err");
+    done();
   };
   var run=function(){
     if(isNative()&&nativeClaude){
@@ -824,6 +844,93 @@ function apiDraft(prompt,done){
     else aiStatus("Something went wrong: "+msg,"err");
   }).then(function(){ if(done) done(); });
 }
+function deepseekDraft(prompt,done){
+  fetch("https://api.deepseek.com/chat/completions",{
+    method:"POST",
+    headers:{ "content-type":"application/json", "authorization":"Bearer "+state.ai.deepseekKey },
+    body:JSON.stringify({
+      model:"deepseek-chat",
+      max_tokens:2500,
+      response_format:{type:"json_object"},
+      messages:[{role:"user",content:prompt}]
+    })
+  }).then(function(r){
+    if(!r.ok) return r.text().then(function(t){ throw new Error("API error "+r.status+": "+t.slice(0,200)); });
+    return r.json();
+  }).then(function(j){
+    var text=(j.choices&&j.choices[0]&&j.choices[0].message&&j.choices[0].message.content)||"";
+    applyAIResult(text);
+  }).catch(function(e){
+    var msg=String(e&&e.message||e);
+    if(/401|invalid|authentication/i.test(msg)) aiStatus("That DeepSeek API key doesn't seem to work — check it in Settings → AI assistant.","err");
+    else if(/402|Insufficient/i.test(msg)) aiStatus("Your DeepSeek account has no credit — top it up at platform.deepseek.com.","err");
+    else if(/Failed to fetch|NetworkError|CSP|blocked/i.test(msg)) aiStatus('Couldn\'t reach the DeepSeek API from here. Use "Open claude.ai with prompt" instead.',"err");
+    else aiStatus("Something went wrong: "+msg,"err");
+  }).then(function(){ if(done) done(); });
+}
+
+/* ---------- voice notes (speak a change, the AI applies it) ---------- */
+var voiceOn=false, voiceBase="";
+function voiceNativeAvailable(){
+  return !!(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.voiceStart);
+}
+function voiceWebCtor(){ return window.SpeechRecognition||window.webkitSpeechRecognition||null; }
+function voiceSupported(){ return voiceNativeAvailable()||!!voiceWebCtor(); }
+var webRec=null;
+function paintVoiceBtn(){
+  var b=document.getElementById("aiVoiceBtn"); if(!b) return;
+  b.className=voiceOn?"btn danger sm":"btn sm";
+  b.innerHTML=(voiceOn?svgMicOff():svgMic())+(voiceOn?" Listening — tap to finish":" Voice note");
+}
+function svgMic(){ return '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v1a7 7 0 0 0 14 0v-1M12 18v4"/></svg>'; }
+function svgMicOff(){ return '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><rect x="8" y="8" width="8" height="8" rx="1.5" fill="currentColor"/></svg>'; }
+function setVoiceText(t){
+  var el=document.getElementById("aiNotes"); if(!el) return;
+  el.value=voiceBase+t;
+}
+function toggleVoice(){
+  if(voiceOn){ stopVoice(); return; }
+  /* Electron exposes the web speech constructor but its engine never works
+     there; only the App Store apps have the native recognizer */
+  if(!voiceSupported()||(isNative()&&!voiceNativeAvailable())){
+    aiStatus("Voice notes need the iPhone/iPad/Mac App Store app. Tip: you can also use your keyboard's dictation (microphone key) straight into the notes box, then click Draft.","err");
+    return;
+  }
+  var el=document.getElementById("aiNotes");
+  voiceBase=el&&el.value?el.value+"\n\n":"";
+  voiceOn=true; paintVoiceBtn();
+  aiStatus("Listening… describe the change (e.g. “set the monthly bookkeeping fee to 800 dollars”), then tap the button again.");
+  if(voiceNativeAvailable()){ window.webkit.messageHandlers.voiceStart.postMessage(""); return; }
+  var C=voiceWebCtor();
+  webRec=new C();
+  webRec.continuous=true; webRec.interimResults=true; webRec.lang="en-US";
+  var finalT="";
+  webRec.onresult=function(ev){
+    var interim="";
+    for(var i=ev.resultIndex;i<ev.results.length;i++){
+      if(ev.results[i].isFinal) finalT+=ev.results[i][0].transcript;
+      else interim+=ev.results[i][0].transcript;
+    }
+    setVoiceText(finalT+interim);
+  };
+  webRec.onerror=function(ev){ window.tcoVoiceError("Voice input problem: "+(ev.error||"unknown")); };
+  webRec.onend=function(){ if(voiceOn){ voiceOn=false; paintVoiceBtn(); voiceApply(); } };
+  try{ webRec.start(); }catch(e){ window.tcoVoiceError(String(e)); }
+}
+function stopVoice(){
+  if(voiceNativeAvailable()){ window.webkit.messageHandlers.voiceStop.postMessage(""); return; }
+  if(webRec){ try{ webRec.stop(); }catch(e){} }
+}
+function voiceApply(){
+  var t=aiNotesText();
+  if(!t){ aiStatus("Didn't catch anything — try again, speaking a little louder.","err"); return; }
+  aiDraft();
+}
+/* called by the native shells */
+window.tcoVoicePartial=function(t){ setVoiceText(t); };
+window.tcoVoiceFinal=function(t){ setVoiceText(t); voiceOn=false; paintVoiceBtn(); voiceApply(); };
+window.tcoVoiceError=function(m){ voiceOn=false; paintVoiceBtn(); aiStatus(String(m),"err"); };
+
 function aiOpenClaude(){
   var notes=aiNotesText();
   if(!notes){ aiStatus("Paste or upload your notes first.","err"); return; }
@@ -901,6 +1008,7 @@ function renderForm(){
   h+='<button class="btn primary sm" id="aiApiBtn" onclick="aiDraft()">Draft with Claude</button>';
   h+='<button class="btn sm" onclick="aiOpenClaude()">Open claude.ai with prompt</button>';
   h+='<label class="btn sm" style="display:inline-flex;align-items:center;cursor:pointer">Upload notes (.txt)<input type="file" accept=".txt,.md,.text,text/plain" style="display:none" onchange="aiUpload(this)"></label>';
+  h+='<button class="btn sm" id="aiVoiceBtn" onclick="toggleVoice()">'+svgMic()+' Voice note</button>';
   h+='</div>';
   h+='<div id="aiConn" class="status-line"></div>';
   h+='<div id="aiStatus" class="status-line"></div>';
@@ -1458,7 +1566,8 @@ function renderSettings(){
   }
   h+='<div class="frow"><div class="field" style="flex:2"><label>Anthropic API key <span class="sub">(optional; stored only in this browser)</span></label><input type="password" value="'+escA(state.ai.apiKey)+'" placeholder="sk-ant-…" oninput="state.ai.apiKey=this.value.trim();saveState()"></div>';
   h+='<div class="field"><label>Model <span class="sub">(API key method only)</span></label><input type="text" value="'+escA(state.ai.model)+'" oninput="state.ai.model=this.value.trim();saveState()"></div></div>';
-  h+='<p class="hint" style="margin:0">Privacy note: whichever method you use, the notes you paste are sent to Anthropic (Claude) to be read. Don\'t include anything you wouldn\'t put in a Claude chat.</p></div>';
+  h+='<div class="frow"><div class="field" style="flex:2"><label>DeepSeek API key <span class="sub">(optional alternative; from platform.deepseek.com; used when no Claude connection is available)</span></label><input type="password" value="'+escA(state.ai.deepseekKey||"")+'" placeholder="sk-…" oninput="state.ai.deepseekKey=this.value.trim();saveState()"></div></div>';
+  h+='<p class="hint" style="margin:0">Privacy note: whichever method you use, the notes you paste (or speak) are sent to that AI provider (Anthropic or DeepSeek) to be read. Don\'t include anything you wouldn\'t put in a chat with them.</p></div>';
 
   /* services & packages */
   h+='<div class="card"><h3 class="set-h">Services, packages &amp; standard wording</h3><p class="hint">Each service carries its own packages, add-ons, and standard agreement wording. Changes here become the starting point for every <b>new</b> agreement.</p>';

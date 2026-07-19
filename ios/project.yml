@@ -32,6 +32,8 @@ targets:
         CFBundleDisplayName: TCO Agreements
         UILaunchScreen: {}
         ITSAppUsesNonExemptEncryption: false
+        NSMicrophoneUsageDescription: Voice notes use the microphone so you can dictate changes to an agreement.
+        NSSpeechRecognitionUsageDescription: Voice notes are transcribed on-device so the app can apply your spoken changes to the agreement.
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationPortraitUpsideDown
@@ -66,3 +68,5 @@ targets:
         LSApplicationCategoryType: public.app-category.business
         ITSAppUsesNonExemptEncryption: false
         NSHumanReadableCopyright: © TCO (The Contractors Office)
+        NSMicrophoneUsageDescription: Voice notes use the microphone so you can dictate changes to an agreement.
+        NSSpeechRecognitionUsageDescription: Voice notes are transcribed on-device so the app can apply your spoken changes to the agreement.

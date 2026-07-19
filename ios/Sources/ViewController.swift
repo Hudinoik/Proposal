@@ -1,5 +1,7 @@
 import UIKit
 import WebKit
+import Speech
+import AVFoundation
 
 /* Native shell around index.html (copied into Resources/ at build time —
    the HTML file is the app, same as the browser and desktop versions).
@@ -19,6 +21,8 @@ class ViewController: UIViewController, WKUIDelegate, WKNavigationDelegate, WKSc
     let printOverride = "window.print = function(){ window.webkit.messageHandlers.printPage.postMessage(''); };"
     controller.addUserScript(WKUserScript(source: printOverride, injectionTime: .atDocumentStart, forMainFrameOnly: true))
     controller.add(self, name: "printPage")
+    controller.add(self, name: "voiceStart")
+    controller.add(self, name: "voiceStop")
 
     let config = WKWebViewConfiguration()
     config.userContentController = controller
@@ -54,6 +58,8 @@ class ViewController: UIViewController, WKUIDelegate, WKNavigationDelegate, WKSc
 
   func userContentController(_ userContentController: WKUserContentController,
                              didReceive message: WKScriptMessage) {
+    if message.name == "voiceStart" { startVoice(); return }
+    if message.name == "voiceStop" { stopVoice(); return }
     guard message.name == "printPage" else { return }
     let raw = (webView.title?.isEmpty == false ? webView.title! : "TCO Agreement")
     let name = raw.components(separatedBy: CharacterSet(charactersIn: "/\\:*?\"<>|")).joined()
@@ -78,6 +84,93 @@ class ViewController: UIViewController, WKUIDelegate, WKNavigationDelegate, WKSc
       pop.permittedArrowDirections = []
     }
     present(share, animated: true)
+  }
+
+  // MARK: voice notes — live on-device speech recognition streamed to the page
+
+  private let speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
+  private var audioEngine: AVAudioEngine?
+  private var recRequest: SFSpeechAudioBufferRecognitionRequest?
+  private var recTask: SFSpeechRecognitionTask?
+  private var voiceActive = false
+  private var lastTranscript = ""
+
+  private func jsCall(_ fn: String, _ text: String) {
+    guard let data = try? JSONSerialization.data(withJSONObject: [text]),
+          let arr = String(data: data, encoding: .utf8) else { return }
+    webView.evaluateJavaScript("window.\(fn)(\(arr)[0])", completionHandler: nil)
+  }
+
+  private func startVoice() {
+    SFSpeechRecognizer.requestAuthorization { auth in
+      DispatchQueue.main.async {
+        guard auth == .authorized else {
+          self.jsCall("tcoVoiceError", "Speech recognition permission was declined. Enable it under Settings > TCO Agreements."); return
+        }
+        AVAudioSession.sharedInstance().requestRecordPermission { ok in
+          DispatchQueue.main.async {
+            guard ok else {
+              self.jsCall("tcoVoiceError", "Microphone permission was declined. Enable it under Settings > TCO Agreements."); return
+            }
+            self.beginRecording()
+          }
+        }
+      }
+    }
+  }
+
+  private func beginRecording() {
+    guard let recognizer = speechRecognizer, recognizer.isAvailable else {
+      jsCall("tcoVoiceError", "Speech recognition isn't available on this device right now."); return
+    }
+    do {
+      let session = AVAudioSession.sharedInstance()
+      try session.setCategory(.record, mode: .measurement, options: .duckOthers)
+      try session.setActive(true, options: .notifyOthersOnDeactivation)
+    } catch { jsCall("tcoVoiceError", "Could not access the microphone."); return }
+
+    let engine = AVAudioEngine()
+    let request = SFSpeechAudioBufferRecognitionRequest()
+    request.shouldReportPartialResults = true
+    let input = engine.inputNode
+    input.installTap(onBus: 0, bufferSize: 1024, format: input.outputFormat(forBus: 0)) { buffer, _ in
+      request.append(buffer)
+    }
+    engine.prepare()
+    do { try engine.start() } catch { jsCall("tcoVoiceError", "Could not start the microphone."); return }
+
+    audioEngine = engine
+    recRequest = request
+    voiceActive = true
+    lastTranscript = ""
+    recTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
+      guard let self = self else { return }
+      DispatchQueue.main.async {
+        if let r = result {
+          self.lastTranscript = r.bestTranscription.formattedString
+          if r.isFinal { self.finishVoice(); return }
+          if self.voiceActive { self.jsCall("tcoVoicePartial", self.lastTranscript) }
+        }
+        if error != nil { self.finishVoice() }
+      }
+    }
+  }
+
+  private func stopVoice() {
+    recRequest?.endAudio()
+    audioEngine?.stop()
+    // the recognizer delivers its final result (or an error) after endAudio;
+    // finishVoice fires exactly once from that callback
+  }
+
+  private func finishVoice() {
+    guard voiceActive else { return }
+    voiceActive = false
+    audioEngine?.stop()
+    audioEngine?.inputNode.removeTap(onBus: 0)
+    try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    audioEngine = nil; recRequest = nil; recTask = nil
+    jsCall("tcoVoiceFinal", lastTranscript)
   }
 
   // MARK: external links -> Safari
