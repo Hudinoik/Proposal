@@ -2,6 +2,8 @@ import Cocoa
 import WebKit
 import Speech
 import AVFoundation
+import PDFKit
+import UniformTypeIdentifiers
 
 /* Native macOS shell around index.html for Mac App Store / TestFlight
    distribution (the website-download Mac app remains the Electron build).
@@ -78,23 +80,61 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKUIDelegate, WKNavigationDe
     NSApp.mainMenu = main
   }
 
-  // MARK: window.print() -> macOS print panel (includes "Save as PDF")
+  // MARK: window.print() -> capture the laid-out pages into a PDF (identical
+  // to the preview: full-bleed bands, no print-engine margins) and save it.
 
   func userContentController(_ userContentController: WKUserContentController,
                              didReceive message: WKScriptMessage) {
     if message.name == "voiceStart" { startVoice(); return }
     if message.name == "voiceStop" { stopVoice(); return }
     guard message.name == "printPage" else { return }
-    let info = NSPrintInfo()
-    info.topMargin = 0; info.bottomMargin = 0; info.leftMargin = 0; info.rightMargin = 0
-    info.horizontalPagination = .fit
-    info.verticalPagination = .automatic
-    let op = webView.printOperation(with: info)
-    op.showsPrintPanel = true
-    op.showsProgressPanel = true
-    // WKWebView's print operation renders empty unless the view gets a frame
-    op.view?.frame = webView.bounds
-    op.runModal(for: window, delegate: nil, didRun: nil, contextInfo: nil)
+    exportPagesPDF()
+  }
+
+  private func exportPagesPDF() {
+    let prep = "(function(){var n=document.querySelectorAll('.doc.page').length;" +
+               "if(n>0){document.body.classList.add('pdfmode');window.scrollTo(0,0);}return n;})()"
+    webView.evaluateJavaScript(prep) { res, _ in
+      let n = (res as? NSNumber)?.intValue ?? 0
+      guard n > 0 else { return }
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+        // note: the intermediate capture is one tall page (n x 1056pt);
+        // PDF caps a page at 14400pt, so this supports up to 13 sheets —
+        // beyond any agreement produced today
+        self.webView.createPDF(configuration: WKPDFConfiguration()) { result in
+          self.webView.evaluateJavaScript(
+            "document.body.classList.remove('pdfmode'); if (window.fitPreviewPages) fitPreviewPages();",
+            completionHandler: nil)
+          if case .success(let data) = result { self.sliceAndSave(data: data, pageCount: n) }
+        }
+      }
+    }
+  }
+
+  private func sliceAndSave(data: Data, pageCount: Int) {
+    guard let src = PDFDocument(data: data), let big = src.page(at: 0), pageCount > 0 else { return }
+    let media = big.bounds(for: .mediaBox)
+    let pageH = media.height / CGFloat(pageCount)
+    let out = PDFDocument()
+    for i in 0..<pageCount {
+      guard let slice = big.copy() as? PDFPage else { continue }
+      let box = CGRect(x: media.minX,
+                       y: media.minY + media.height - CGFloat(i + 1) * pageH,
+                       width: media.width, height: pageH)
+      slice.setBounds(box, for: .mediaBox)
+      slice.setBounds(box, for: .cropBox)
+      out.insert(slice, at: out.pageCount)
+    }
+    guard out.pageCount > 0, let pdf = out.dataRepresentation() else { return }
+    let raw = (webView.title?.isEmpty == false ? webView.title! : "TCO Agreement")
+    let name = raw.components(separatedBy: CharacterSet(charactersIn: "/\\:*?\"<>|")).joined()
+    let panel = NSSavePanel()
+    panel.nameFieldStringValue = name + ".pdf"
+    panel.allowedContentTypes = [.pdf]
+    panel.beginSheetModal(for: window) { resp in
+      guard resp == .OK, let url = panel.url else { return }
+      try? pdf.write(to: url, options: .atomic)
+    }
   }
 
   // MARK: voice notes — live on-device speech recognition streamed to the page

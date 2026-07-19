@@ -2,6 +2,7 @@ import UIKit
 import WebKit
 import Speech
 import AVFoundation
+import PDFKit
 
 /* Native shell around index.html (copied into Resources/ at build time —
    the HTML file is the app, same as the browser and desktop versions).
@@ -50,33 +51,68 @@ class ViewController: UIViewController, WKUIDelegate, WKNavigationDelegate, WKSc
 
   override var preferredStatusBarStyle: UIStatusBarStyle { .lightContent }
 
-  // MARK: window.print() -> render a real PDF and open the share sheet
-  // (Save to Files, WhatsApp, Mail, AirDrop…). The app sets document.title
-  // to "<client> - <agreement>" right before printing, so use it as the
-  // file name. Letter size, zero margins: the letterhead bands are
-  // full-bleed and .pg-body supplies the text margins.
+  // MARK: window.print() -> capture the app's own laid-out pages into a PDF
+  // and open the share sheet. The page enters "pdfmode" (only the page stack
+  // visible, exact letter-size pages), the whole stack is rendered once with
+  // WKWebView.createPDF, then sliced into one PDF page per sheet — so the
+  // PDF is pixel-identical to the preview: full-bleed bands, no engine
+  // margins, no clipping.
 
   func userContentController(_ userContentController: WKUserContentController,
                              didReceive message: WKScriptMessage) {
     if message.name == "voiceStart" { startVoice(); return }
     if message.name == "voiceStop" { stopVoice(); return }
     guard message.name == "printPage" else { return }
+    exportPagesPDF()
+  }
+
+  private func exportPagesPDF() {
+    let prep = "(function(){var n=document.querySelectorAll('.doc.page').length;" +
+               "if(n>0){document.body.classList.add('pdfmode');window.scrollTo(0,0);}return n;})()"
+    webView.evaluateJavaScript(prep) { res, _ in
+      let n = (res as? NSNumber)?.intValue ?? 0
+      guard n > 0 else { return }
+      // give layout a beat to settle in pdfmode before capturing
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+        // note: the intermediate capture is one tall page (n x 1056pt);
+        // PDF caps a page at 14400pt, so this supports up to 13 sheets —
+        // beyond any agreement produced today
+        self.webView.createPDF(configuration: WKPDFConfiguration()) { result in
+          self.leavePDFMode()
+          switch result {
+          case .success(let data): self.sliceAndShare(data: data, pageCount: n)
+          case .failure: break
+          }
+        }
+      }
+    }
+  }
+
+  private func leavePDFMode() {
+    webView.evaluateJavaScript(
+      "document.body.classList.remove('pdfmode'); if (window.fitPreviewPages) fitPreviewPages();",
+      completionHandler: nil)
+  }
+
+  private func sliceAndShare(data: Data, pageCount: Int) {
+    guard let src = PDFDocument(data: data), let big = src.page(at: 0), pageCount > 0 else { return }
+    let media = big.bounds(for: .mediaBox)
+    let pageH = media.height / CGFloat(pageCount)
+    let out = PDFDocument()
+    for i in 0..<pageCount {
+      guard let slice = big.copy() as? PDFPage else { continue }
+      let box = CGRect(x: media.minX,
+                       y: media.minY + media.height - CGFloat(i + 1) * pageH,
+                       width: media.width, height: pageH)
+      slice.setBounds(box, for: .mediaBox)
+      slice.setBounds(box, for: .cropBox)
+      out.insert(slice, at: out.pageCount)
+    }
+    guard out.pageCount > 0, let pdf = out.dataRepresentation() else { return }
     let raw = (webView.title?.isEmpty == false ? webView.title! : "TCO Agreement")
     let name = raw.components(separatedBy: CharacterSet(charactersIn: "/\\:*?\"<>|")).joined()
-    let page = CGRect(x: 0, y: 0, width: 612, height: 792)
-    let renderer = UIPrintPageRenderer()
-    renderer.addPrintFormatter(webView.viewPrintFormatter(), startingAtPageAt: 0)
-    renderer.setValue(page, forKey: "paperRect")
-    renderer.setValue(page, forKey: "printableRect")
-    let data = NSMutableData()
-    UIGraphicsBeginPDFContextToData(data, page, nil)
-    for i in 0..<renderer.numberOfPages {
-      UIGraphicsBeginPDFPage()
-      renderer.drawPage(at: i, in: UIGraphicsGetPDFContextBounds())
-    }
-    UIGraphicsEndPDFContext()
     let url = FileManager.default.temporaryDirectory.appendingPathComponent(name + ".pdf")
-    do { try data.write(to: url, options: .atomic) } catch { return }
+    do { try pdf.write(to: url, options: .atomic) } catch { return }
     let share = UIActivityViewController(activityItems: [url], applicationActivities: nil)
     if let pop = share.popoverPresentationController {   // iPad requires an anchor
       pop.sourceView = view

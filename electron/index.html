@@ -137,9 +137,9 @@
      content in between; the paginator distributes blocks across pages */
   .doc.page{width:816px;height:1056px;display:flex;flex-direction:column;margin:0 auto 20px}
   .doc .pg-band,.doc .pg-foot{flex:0 0 auto}
-  .doc .pbody{flex:1 1 auto;overflow:hidden;padding:26px 78px 10px;min-height:0}
+  .doc .pbody{flex:1 1 auto;overflow:hidden;padding:26px 78px 22px;min-height:0}
   .bband{background:var(--navy);display:flex;align-items:center;gap:20px;padding:20px 40px 22px;position:relative;overflow:hidden;-webkit-print-color-adjust:exact;print-color-adjust:exact;border-bottom:6px solid #fff}
-  .bband .bseal{height:88px;width:88px;object-fit:contain;background:#fff;border-radius:50%;padding:4px;position:relative;z-index:2}
+  .bband .bseal{height:98px;width:98px;object-fit:contain;background:#fff;border-radius:50%;padding:4px;position:relative;z-index:2}
   .bband .btx{position:relative;z-index:2}
   .bband .bname{color:var(--lime);font-weight:800;font-size:23px;letter-spacing:.5px;text-transform:uppercase}
   .bband .bweb{color:#e8edf5;font-size:13px;margin-top:6px}
@@ -154,11 +154,14 @@
   .fband .flbl{font-weight:700;font-size:12.5px;letter-spacing:.4px;margin-bottom:7px;padding-bottom:5px;position:relative}
   .fband .flbl::after{content:"";position:absolute;left:0;bottom:0;width:34px;border-bottom:2px solid #fff}
   .fband .fval{color:#c6d2e4;font-size:12px;overflow-wrap:anywhere}
-  .doc h1.cover{margin:44px 0 8px;color:#111;font-size:25px;line-height:1.45;text-align:center;font-weight:700}
+  .doc h1.cover{margin:36px 0 6px;color:#111;font-size:25px;line-height:1.45;text-align:left;font-weight:700}
   .doc .cover-tag{text-align:center;color:#5c6675;font-size:12px;letter-spacing:.8px;text-transform:uppercase;margin-bottom:8px}
-  .doc .parties{margin:34px 0 8px}
-  .doc .parties p{margin:13px 0}
-  .doc .parties p.plbl{margin-bottom:-4px;font-size:14.5px}
+  .doc .parties{margin:30px 0 8px}
+  .doc .parties p{margin:2px 0}
+  .doc .parties p.plbl{margin:15px 0 0;font-size:14.5px}
+  .doc .parties p.pand{margin:14px 0}
+  .doc .parties p:first-child{margin-bottom:12px}
+  .doc .parties p:last-child{margin-top:15px}
   .doc h2{color:#111;font-size:21px;font-weight:800;margin:34px 0 10px;border:none;padding:0;break-after:avoid;page-break-after:avoid}
   .doc h4{color:#111;font-size:15.5px;font-weight:700;margin:20px 0 6px;break-after:avoid;page-break-after:avoid}
   .doc p{margin:9px 0}
@@ -181,6 +184,14 @@
   .doc .slbl{font-size:12px;color:#555}
   .doc .empty-hint{color:#8b93a5;text-align:center;padding:60px 20px}
   .doc .keep{break-inside:avoid;page-break-inside:avoid}
+
+  /* pdfmode: the native shells capture the page stack directly */
+  body.pdfmode{padding-bottom:0 !important;background:#fff}
+  .pdfmode .topbar,.pdfmode .pane-form,.pdfmode .settings-wrap,.pdfmode #viewClients,.pdfmode .actionbar{display:none !important}
+  .pdfmode .layout{display:block;padding:0;gap:0}
+  .pdfmode .pane-preview{position:static;max-height:none;overflow:visible;background:#fff;padding:0;border-radius:0}
+  .pdfmode .pages{zoom:1 !important}
+  .pdfmode .doc.page{margin:0;box-shadow:none}
 
   /* ============ PRINT ============ */
   /* zero page margin: the navy banner/footer bands run edge to edge like
@@ -695,7 +706,7 @@ function buildAIPrompt(notes){
   + '  "scopeExtras": [],                       // up to 6 short client-specific scope bullets worth adding (volumes, platforms, special arrangements)\n'
   + '  "summary": ""                            // 2-3 sentences: what you understood and anything unclear\n'
   + '}\n\n'
-  + "Rules: only include facts that are actually in the notes; leave fields empty/null when unknown. Do not invent prices.\n\n"
+  + "Rules: only include facts that are actually in the notes; leave fields empty/null when unknown. Do not invent prices. Only use the 'other' service when nothing listed fits AND the notes give you concrete work to describe for it — never add it alongside a fitting service.\n\n"
   + "=== NOTES START ===\n" + notes + "\n=== NOTES END ===";
 }
 function aiNotesText(){
@@ -1417,10 +1428,18 @@ function paginateDoc(band,fband,contentHTML){
   var bandH=host.querySelector(".pg-band").offsetHeight;
   var footH=host.querySelector(".pg-foot").offsetHeight;
   var cs=getComputedStyle(bodyEl);
-  var CAP=1056-bandH-footH-parseFloat(cs.paddingTop)-parseFloat(cs.paddingBottom);
+  var CAP=1056-bandH-footH-parseFloat(cs.paddingTop)-parseFloat(cs.paddingBottom)-8; /* safety so text never kisses the footer */
   var MIN_AFTER_HEAD=90;   /* a heading needs at least this much content room below it */
-  var pages=[], cur=[], used=0, lastHead=null;
-  function flush(){ if(cur.length){ pages.push(cur.join("")); } cur=[]; used=0; }
+  var pages=[], cur=[], used=0;   /* cur: [{html,h,mt,carry}] */
+  function flush(){ if(cur.length){ pages.push(cur.map(function(b){return b.html;}).join("")); } cur=[]; used=0; }
+  /* move any trailing carry-blocks (headings, ":" lead-ins) to the next page
+     together, so chains like heading + lead-in never end a page */
+  function breakPage(){
+    var moved=[];
+    while(cur.length>1 && cur[cur.length-1].carry){ var b=cur.pop(); used-=b.h; moved.unshift(b); }
+    flush();
+    for(var k=0;k<moved.length;k++){ if(used===0) used+=moved[k].mt; cur.push(moved[k]); used+=moved[k].h; }
+  }
   var kids=Array.prototype.slice.call(bodyEl.children);
   function blkH(i){
     var el=kids[i], nx=kids[i+1];
@@ -1431,38 +1450,30 @@ function paginateDoc(band,fband,contentHTML){
     var el=kids[i], h=blkH(i);
     var mt=parseFloat(getComputedStyle(el).marginTop)||0;
     var isHead=/^H[1-4]$/.test(el.tagName);
-    if(isHead && used>0 && used+h+MIN_AFTER_HEAD>CAP){
-      if(lastHead && cur.length>1){ cur.pop(); flush(); cur.push(lastHead.html); used=lastHead.h+lastHead.mt; }
-      else flush();
-    }
+    var isLead=(el.tagName==="P")&&/:\s*$/.test(el.textContent||"");
+    if(isHead && used>0 && used+h+MIN_AFTER_HEAD>CAP) breakPage();
     if(used>0 && used+h>CAP){
       /* split long bullet lists at the page edge instead of leaving a gap */
       if(el.tagName==="UL" && (CAP-used)>130){
-        var lis=Array.prototype.slice.call(el.children), fit=[], rest=[];
-        var base=el.offsetTop, avail=CAP-used-16, fitEnd=0;
+        var lis=Array.prototype.slice.call(el.children), fit=[], rest=[], fitEnd=0;
+        var base=el.offsetTop, avail=CAP-used-16;
         for(var L=0;L<lis.length;L++){
           var liEnd=(lis[L+1]?lis[L+1].offsetTop:el.offsetTop+el.offsetHeight)-base;
           if(!rest.length && liEnd<=avail){ fit.push(lis[L].outerHTML); fitEnd=liEnd; }
           else rest.push(lis[L].outerHTML);
         }
         if(fit.length&&rest.length){
-          cur.push('<ul>'+fit.join("")+'</ul>');
+          cur.push({html:'<ul>'+fit.join("")+'</ul>',h:fitEnd,mt:0,carry:false});
           flush();
-          cur.push('<ul>'+rest.join("")+'</ul>');
-          used=(h-fitEnd)+14;   /* measured remainder, not an estimate */
-          lastHead=null;
+          cur.push({html:'<ul>'+rest.join("")+'</ul>',h:(h-fitEnd)+14,mt:0,carry:false});
+          used=(h-fitEnd)+14;
           continue;
         }
       }
-      /* never leave a heading stranded as the last thing on a page */
-      if(lastHead && cur.length>1){
-        cur.pop(); flush();
-        cur.push(lastHead.html); used=lastHead.h+lastHead.mt;
-      } else flush();
+      breakPage();
     }
     if(used===0) used+=mt;   /* a block opening a page brings its own top margin */
-    cur.push(el.outerHTML); used+=h;
-    lastHead=isHead?{html:el.outerHTML,h:h,mt:mt}:null;
+    cur.push({html:el.outerHTML,h:h,mt:mt,carry:(isHead||isLead)}); used+=h;
   }
   flush();
   document.body.removeChild(host);
@@ -1503,11 +1514,10 @@ function renderPreview(){
 
   /* cover title */
   h+='<h1 class="cover">'+esc(draft.docTitle||"Services Agreement")+'</h1>';
-  if(hd.tagline) h+='<div class="cover-tag">'+esc(hd.tagline)+'</div>';
 
   /* parties */
   h+='<div class="parties">'+(hd.intro?'<p>'+esc(hd.intro)+'</p>':"");
-  h+='<p class="plbl"><b>'+esc(hd.providerLabel||"Service Provider:")+'</b></p><p>'+esc(provName)+'</p><p>and</p>';
+  h+='<p class="plbl"><b>'+esc(hd.providerLabel||"Service Provider:")+'</b></p><p>'+esc(provName)+'</p><p class="pand">and</p>';
   h+='<p class="plbl"><b>'+esc(hd.clientLabel||"Client:")+'</b></p><p>'+(draft.client.business?esc(draft.client.business):"__________________")+'</p>'
     +(draft.client.rep?'<p>Representative: '+esc(draft.client.rep)+'</p>':"");
   h+='<p><b>Effective Date:</b> '+esc(fmtDate(draft.client.effectiveDate))+'</p></div>';
@@ -1527,10 +1537,17 @@ function renderPreview(){
     return out;
   }
 
-  /* scope */
-  var scopeBody = multi ? ('<p>TCO will provide the following services for the Client:</p>'+perSvcBlock(function(sv){
-      var s=sv.sections; return listBlock(s.scopeIntro,s.scopeItems,s.scopeNote);
-    })) : (function(){ var s=draft.svc[0].sections; return listBlock(s.scopeIntro,s.scopeItems,s.scopeNote); })();
+  /* scope — print the generic intro once; skip services with nothing real to say */
+  var GENERIC_INTRO=/^TCO will provide the following services for the Client[.:]?$/i;
+  function svcScopeBlock(sv){
+    var sx=sv.sections;
+    var hasItems=sx.scopeItems&&sx.scopeItems.length;
+    var intro=(sx.scopeIntro&&!GENERIC_INTRO.test(sx.scopeIntro.trim()))?sx.scopeIntro:"";
+    if(!hasItems&&!intro) return "";
+    return listBlock(intro,sx.scopeItems,sx.scopeNote);
+  }
+  var scopeBody = multi ? ('<p>TCO will provide the following services for the Client:</p>'+perSvcBlock(svcScopeBlock))
+    : (function(){ var s=draft.svc[0].sections; return listBlock(s.scopeIntro,s.scopeItems,s.scopeNote); })();
   h+=sec("Scope of Services", scopeBody);
 
   /* per-service process sections (own titles) */
