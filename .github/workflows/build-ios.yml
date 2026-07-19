@@ -72,6 +72,15 @@ jobs:
             echo "::error::Apple secrets are not configured (APPLE_TEAM_ID, APPSTORE_KEY_ID, APPSTORE_ISSUER_ID, APPSTORE_PRIVATE_KEY)."
             exit 1
           fi
+      # Secrets pasted from Apple's site often carry stray whitespace, which
+      # makes App Store Connect return 401 — strip it before use.
+      - name: Clean credential values
+        run: |
+          {
+            echo "APPLE_TEAM_ID=$(printf '%s' "$APPLE_TEAM_ID" | tr -d '[:space:]')"
+            echo "APPSTORE_KEY_ID=$(printf '%s' "$APPSTORE_KEY_ID" | tr -d '[:space:]')"
+            echo "APPSTORE_ISSUER_ID=$(printf '%s' "$APPSTORE_ISSUER_ID" | tr -d '[:space:]')"
+          } >> "$GITHUB_ENV"
       - name: Install XcodeGen
         run: brew install xcodegen
       - name: Assemble project
