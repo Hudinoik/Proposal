@@ -190,6 +190,7 @@
   .pdfmode .topbar,.pdfmode .pane-form,.pdfmode .settings-wrap,.pdfmode #viewClients,.pdfmode .actionbar{display:none !important}
   .pdfmode .layout{display:block;padding:0;gap:0}
   .pdfmode .pane-preview{position:static;max-height:none;overflow:visible;background:#fff;padding:0;border-radius:0}
+  .pdfmode .pages{zoom:1 !important}
   .pdfmode .doc.page{display:none}
   .pdfmode .doc.page.pdfshot{display:flex;margin:0;box-shadow:none}
 
@@ -1506,6 +1507,7 @@ function tcoPdfDone(){
 }
 /* scale the page stack down to the preview pane's width (screen only) */
 function fitPreviewPages(){
+  if(document.body.classList.contains("pdfmode")) return;  /* never during capture */
   var pv=document.querySelector(".pane-preview"), pg=document.querySelector(".pages");
   if(!pv||!pg) return;
   var pad=(window.innerWidth<=700)?20:52;
