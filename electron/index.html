@@ -242,6 +242,7 @@
   <div class="spacer"></div>
   <div class="tabs">
     <button id="tabNew" class="active" onclick="showView('new')">New Agreement</button>
+    <button id="tabClients" onclick="showView('clients')">Clients</button>
     <button id="tabSettings" onclick="showView('settings')">Settings</button>
   </div>
   <button class="btn accent" onclick="doPrint()">Save as PDF</button>
@@ -255,6 +256,9 @@
 
 <!-- ================= SETTINGS VIEW ================= -->
 <div id="viewSettings" class="settings-wrap" style="display:none"></div>
+
+<!-- ================= CLIENTS VIEW ================= -->
+<div id="viewClients" class="settings-wrap" style="display:none"></div>
 
 <script>
 /* =====================================================================
@@ -746,9 +750,16 @@ var helperUp=false, nativeClaude=false, lastPing=0;
 function isNative(){ return typeof window!=="undefined" && !!window.tcoNative; }
 /* the iPhone/iPad/Mac App Store shells (WKWebView with our message bridge) */
 function isAppleApp(){ return typeof window!=="undefined" && !!(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.printPage); }
+/* the iPhone/iPad app specifically (DeepSeek-only AI there) */
+function isIOSApp(){ return isAppleApp() && (/iPhone|iPad|iPod/.test(navigator.userAgent)||((navigator.maxTouchPoints||0)>1)); }
 function paintAIConn(){
   var el=document.getElementById("aiConn"); if(!el) return;
   if(isAppleApp()){
+    if(isIOSApp()){
+      if(state.ai.deepseekKey) el.innerHTML='&#9679; DeepSeek API key saved — one-tap drafting is ready.';
+      else el.innerHTML='&#9675; For one-tap drafting, add your DeepSeek API key in Settings &rarr; AI assistant.';
+      return;
+    }
     if(state.ai.apiKey) el.innerHTML='&#9679; Claude API key saved — one-tap drafting is ready.';
     else if(state.ai.deepseekKey) el.innerHTML='&#9679; DeepSeek API key saved — one-tap drafting is ready.';
     else el.innerHTML='&#9675; For one-tap drafting, add a Claude or DeepSeek API key in Settings → AI assistant. Zero-setup alternative: "Open claude.ai with prompt".';
@@ -788,6 +799,11 @@ function aiDraft(){
   var btn=document.getElementById("aiApiBtn"); if(btn) btn.disabled=true;
   var done=function(){ var b=document.getElementById("aiApiBtn"); if(b) b.disabled=false; };
   var tryApi=function(){
+    if(isIOSApp()){
+      if(state.ai.deepseekKey){ aiStatus("Drafting with DeepSeek via your API key…"); deepseekDraft(prompt, done); }
+      else { aiStatus("One-tap drafting needs your DeepSeek API key — add it in Settings → AI assistant.","err"); done(); }
+      return;
+    }
     if(state.ai.apiKey){
       aiStatus("Drafting with Claude via your API key…");
       apiDraft(prompt, done);
@@ -854,7 +870,7 @@ function apiDraft(prompt,done){
   }).then(function(){ if(done) done(); });
 }
 function testAIKey(){
-  if(state.ai.apiKey){
+  if(state.ai.apiKey&&!isIOSApp()){
     fetch("https://api.anthropic.com/v1/models",{headers:{
       "x-api-key":state.ai.apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"
     }}).then(function(r){
@@ -891,7 +907,7 @@ function deepseekDraft(prompt,done){
     var msg=String(e&&e.message||e);
     if(/401|invalid|authentication/i.test(msg)) aiStatus("That DeepSeek API key doesn't seem to work — check it in Settings → AI assistant.","err");
     else if(/402|Insufficient/i.test(msg)) aiStatus("Your DeepSeek account has no credit — top it up at platform.deepseek.com.","err");
-    else if(/Failed to fetch|NetworkError|CSP|blocked/i.test(msg)) aiStatus('Couldn\'t reach the DeepSeek API from here. Use "Open claude.ai with prompt" instead.',"err");
+    else if(/Failed to fetch|NetworkError|CSP|blocked/i.test(msg)) aiStatus(isIOSApp()?"Couldn't reach DeepSeek's servers — check your internet connection and try again.":'Couldn\'t reach the DeepSeek API from here. Use "Open claude.ai with prompt" instead.',"err");
     else aiStatus("Something went wrong: "+msg,"err");
   }).then(function(){ if(done) done(); });
 }
@@ -1033,17 +1049,19 @@ function renderForm(){
   h+='<div class="field w100"><textarea id="aiNotes" style="min-height:96px" placeholder="Paste meeting notes or the client\'s email here…"></textarea></div>';
   h+='<div class="addmenu">';
   h+='<button class="btn primary sm" id="aiApiBtn" onclick="aiDraft()">Draft with AI</button>';
-  h+='<button class="btn sm" onclick="aiOpenClaude()">Open claude.ai with prompt</button>';
+  if(!isIOSApp()) h+='<button class="btn sm" onclick="aiOpenClaude()">Open claude.ai with prompt</button>';
   h+='<label class="btn sm" style="display:inline-flex;align-items:center;cursor:pointer">Upload notes (.txt)<input type="file" accept=".txt,.md,.text,text/plain" style="display:none" onchange="aiUpload(this)"></label>';
   h+='<button class="btn sm" id="aiVoiceBtn" onclick="toggleVoice()">'+svgMic()+' Voice note</button>';
   h+='</div>';
   h+='<div id="aiConn" class="status-line"></div>';
   h+='<div id="aiStatus" class="status-line"></div>';
+  if(!isIOSApp()){
   h+='<details class="cust" id="aiPasteWrap" style="margin-top:10px"><summary>Paste Claude\'s reply (from claude.ai)</summary><div class="inner">';
   h+='<p class="hint" style="margin-top:6px">Zero-setup path using your claude.ai subscription: click "Open claude.ai with prompt", send it there, then copy Claude\'s whole answer into this box. <button class="btn sm quiet" onclick="aiCopyPrompt()">Copy the prompt again</button></p>';
   h+='<div class="field w100"><textarea id="aiPaste" style="min-height:80px" placeholder="Paste Claude\'s JSON answer here…"></textarea></div>';
   h+='<button class="btn sm primary" onclick="aiApplyPasted()">Apply Claude\'s reply</button>';
   h+='</div></details>';
+  }
   h+='</div>';
 
   /* --- service picker --- */
@@ -1063,6 +1081,7 @@ function renderForm(){
   h+='<div class="field"><label>Client representative <span class="sub">(optional)</span></label><input type="text" value="'+escA(draft.client.rep)+'" oninput="updClient(\'rep\',this.value)" placeholder="e.g. Barry Engle"></div></div>';
   h+='<div class="frow"><div class="field"><label>Effective date <span class="sub">(leave blank for a fill-in line)</span></label><input type="date" value="'+escA(draft.client.effectiveDate)+'" oninput="updClient(\'effectiveDate\',this.value)"></div>';
   h+='<div class="field"><label>Document title</label><input type="text" value="'+escA(draft.docTitle)+'" oninput="draft.docTitle=this.value;dirty()"></div></div>';
+  h+='<div class="addmenu" style="margin:0 0 10px"><button class="btn sm" onclick="fileCurrentDraft(\'draft\')">Save to client file</button><span class="hint" style="margin:0">Saving a PDF files a copy automatically — see the Clients tab.</span></div>';
   var hd=draft.header||defaultHeader();
   h+='<details class="cust"><summary>Edit the document header</summary><div class="inner">';
   h+='<div class="frow" style="margin-top:8px"><div class="field"><label>Subtitle <span class="sub">(the small line under the title)</span></label><input type="text" value="'+escA(hd.tagline)+'" oninput="updHeader(\'tagline\',this.value)"></div>';
@@ -1578,7 +1597,10 @@ function renderSettings(){
 
   /* AI assistant */
   h+='<div class="card"><h3 class="set-h">AI assistant</h3><p class="hint">Powers "Draft from meeting notes" and voice notes on the New Agreement page.</p>';
-  if(isAppleApp()){
+  if(isIOSApp()){
+    h+='<div class="banner-ai">One-tap drafting and voice notes run on your <b>DeepSeek API key</b>: create one at <b>platform.deepseek.com</b>, paste it below, and tap "Test AI key". A typical draft costs less than a cent, and the key stays on this device.</div>';
+    h+='<div class="addmenu" style="margin:0 0 12px"><button class="btn sm" onclick="testAIKey()">Test AI key</button></div>';
+  } else if(isAppleApp()){
     h+='<div class="banner-ai"><b>Option A — API key (one-tap drafting):</b> paste a <b>Claude</b> key (console.anthropic.com) or a <b>DeepSeek</b> key (platform.deepseek.com) below. A typical draft costs a few cents; the key stays on this device.<br><br>'
       +'<b>Option B — claude.ai (zero setup, uses your Claude subscription):</b> tap "Open claude.ai with prompt" on the New Agreement page, send the prompt there, and paste Claude\'s reply back.</div>';
     h+='<div class="addmenu" style="margin:0 0 12px"><button class="btn sm" onclick="testAIKey()">Test AI key</button></div>';
@@ -1595,10 +1617,12 @@ function renderSettings(){
       +'<b>Option C — API key (pay-per-use):</b> paste an Anthropic API key below (from console.anthropic.com; a typical draft costs a few cents). Only used when the helper isn\'t running.</div>';
     h+='<div class="addmenu" style="margin:0 0 12px"><button class="btn sm" onclick="pingHelper(true,function(){alert(helperUp?\'Helper found — one-click drafting will use your Claude subscription.\':\'Helper not detected. Double-click &quot;Start TCO AI Helper&quot; (and install Claude Code first if you have not), then try again.\');})">Test helper connection</button></div>';
   }
-  h+='<div class="frow"><div class="field" style="flex:2"><label>Claude API key <span class="sub">(from console.anthropic.com; optional, stored only on this device)</span></label><input type="password" value="'+escA(state.ai.apiKey)+'" placeholder="sk-ant-…" oninput="state.ai.apiKey=this.value.trim();saveState()"></div>';
-  h+='<div class="field"><label>Claude model <span class="sub">(Claude API key method only)</span></label><input type="text" value="'+escA(state.ai.model)+'" oninput="state.ai.model=this.value.trim();saveState()"></div></div>';
-  h+='<div class="frow"><div class="field" style="flex:2"><label>DeepSeek API key <span class="sub">(from platform.deepseek.com; optional alternative — used when no Claude connection or key is set up)</span></label><input type="password" value="'+escA(state.ai.deepseekKey||"")+'" placeholder="sk-…" oninput="state.ai.deepseekKey=this.value.trim();saveState()"></div></div>';
-  h+='<p class="hint" style="margin:0">Privacy note: whichever method you use, the notes you paste (or speak) are sent to that AI provider (Anthropic or DeepSeek) to be read. Don\'t include anything you wouldn\'t put in a chat with them.</p></div>';
+  if(!isIOSApp()){
+    h+='<div class="frow"><div class="field" style="flex:2"><label>Claude API key <span class="sub">(from console.anthropic.com; optional, stored only on this device)</span></label><input type="password" value="'+escA(state.ai.apiKey)+'" placeholder="sk-ant-…" oninput="state.ai.apiKey=this.value.trim();saveState()"></div>';
+    h+='<div class="field"><label>Claude model <span class="sub">(Claude API key method only)</span></label><input type="text" value="'+escA(state.ai.model)+'" oninput="state.ai.model=this.value.trim();saveState()"></div></div>';
+  }
+  h+='<div class="frow"><div class="field" style="flex:2"><label>DeepSeek API key <span class="sub">(from platform.deepseek.com'+(isIOSApp()?"":"; optional alternative — used when no Claude connection or key is set up")+')</span></label><input type="password" value="'+escA(state.ai.deepseekKey||"")+'" placeholder="sk-…" oninput="state.ai.deepseekKey=this.value.trim();saveState()"></div></div>';
+  h+='<p class="hint" style="margin:0">Privacy note: the notes you paste (or speak) are sent to '+(isIOSApp()?"DeepSeek":"that AI provider (Anthropic or DeepSeek)")+' to be read. Don\'t include anything you wouldn\'t put in a chat with them.</p></div>';
 
   /* services & packages */
   h+='<div class="card"><h3 class="set-h">Services, packages &amp; standard wording</h3><p class="hint">Each service carries its own packages, add-ons, and standard agreement wording. Changes here become the starting point for every <b>new</b> agreement.</p>';
@@ -1801,13 +1825,118 @@ function applyBrand(){
 function showView(v){
   document.getElementById("viewNew").style.display=(v==="new")?"flex":"none";
   document.getElementById("viewSettings").style.display=(v==="settings")?"block":"none";
+  document.getElementById("viewClients").style.display=(v==="clients")?"block":"none";
   document.getElementById("tabNew").className=(v==="new")?"active":"";
   document.getElementById("tabSettings").className=(v==="settings")?"active":"";
+  document.getElementById("tabClients").className=(v==="clients")?"active":"";
   if(v==="settings") renderSettings();
+  else if(v==="clients") renderClients();
   else { renderForm(); renderPreview(); }
+}
+
+/* =====================================================================
+   CLIENTS — every drafted / exported agreement is filed per client.
+   Stored separately from settings and the working draft (tco_clients_v1).
+   ===================================================================== */
+var CKEY="tco_clients_v1";
+var clients=[];
+function loadClients(){ try{ clients=JSON.parse(localStorage.getItem(CKEY)||"[]")||[]; }catch(e){ clients=[]; } }
+function saveClients(){ try{ localStorage.setItem(CKEY, JSON.stringify(clients)); }catch(e){} }
+function clientFor(name,rep){
+  var key=String(name||"").trim().toLowerCase();
+  var c=null;
+  for(var i=0;i<clients.length;i++) if((clients[i].business||"").trim().toLowerCase()===key){ c=clients[i]; break; }
+  if(!c){ c={id:"c"+Date.now(), business:String(name).trim(), rep:"", agreements:[]}; clients.unshift(c); }
+  if(rep) c.rep=rep;
+  return c;
+}
+/* snapshot the current draft into the client's file.
+   status: "draft" (work in progress) or "final" (a PDF was made) */
+function fileCurrentDraft(status,quiet){
+  if(!draft){ if(!quiet) alert("Nothing to save yet — start an agreement first."); return false; }
+  if(!draft.client.business){ if(!quiet) alert("Fill in the client / business name (Step 2) first, so this can be filed under the right client."); return false; }
+  var c=clientFor(draft.client.business, draft.client.rep);
+  c.agreements.unshift({
+    id:"a"+Date.now(),
+    title:draft.docTitle||"Agreement",
+    status:status||"draft",
+    savedAt:new Date().toISOString(),
+    draft:cp(draft)
+  });
+  if(c.agreements.length>60) c.agreements.length=60;   /* keep files bounded */
+  c.updatedAt=new Date().toISOString();
+  saveClients();
+  if(!quiet) alert('Saved to '+c.business+"’s file (see the Clients tab).");
+  return true;
+}
+function fmtWhen(iso){
+  try{ var d=new Date(iso); return d.toLocaleDateString(undefined,{year:"numeric",month:"short",day:"numeric"})+" "+d.toLocaleTimeString(undefined,{hour:"2-digit",minute:"2-digit"}); }
+  catch(e){ return iso||""; }
+}
+function renderClients(){
+  var el=document.getElementById("viewClients");
+  var q=(window._clientQ||"").toLowerCase();
+  var h='<div class="card"><h3 class="set-h">Clients</h3><p class="hint">Every agreement you draft or save as a PDF is filed here under its client. Open one to keep working on it.</p>';
+  h+='<div class="frow"><div class="field w100"><input type="text" placeholder="Search clients…" value="'+escA(window._clientQ||"")+'" oninput="window._clientQ=this.value;renderClients()"></div></div></div>';
+  var list=clients.filter(function(c){ return !q || (c.business||"").toLowerCase().indexOf(q)>=0 || (c.rep||"").toLowerCase().indexOf(q)>=0; });
+  if(!clients.length){
+    h+='<div class="card"><p class="hint" style="margin:0">No clients yet. Fill in a client name on a new agreement, then use <b>"Save to client file"</b> — or just save a PDF, which files a copy automatically.</p></div>';
+  } else if(!list.length){
+    h+='<div class="card"><p class="hint" style="margin:0">No clients match that search.</p></div>';
+  }
+  list.forEach(function(c){
+    var drafts=c.agreements.filter(function(a){return a.status!=="final";}).length;
+    var finals=c.agreements.length-drafts;
+    h+='<div class="card">';
+    h+='<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap"><h3 class="set-h" style="margin:0">'+esc(c.business)+'</h3>';
+    if(c.rep) h+='<span class="hint" style="margin:0">'+esc(c.rep)+'</span>';
+    h+='<span class="hint" style="margin:0 0 0 auto">'+finals+' final · '+drafts+' draft'+(drafts===1?"":"s")+'</span></div>';
+    if(c.agreements.length){
+      h+='<div style="margin-top:10px">';
+      c.agreements.forEach(function(a){
+        h+='<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--line-soft);flex-wrap:wrap">';
+        h+='<span style="font-weight:600;color:var(--navy)">'+esc(a.title)+'</span>';
+        h+='<span class="hint" style="margin:0">'+fmtWhen(a.savedAt)+'</span>';
+        h+='<span style="font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:'+(a.status==="final"?"var(--lime-dark)":"var(--muted)")+'">'+(a.status==="final"?"PDF made":"Draft")+'</span>';
+        h+='<span style="margin-left:auto;display:flex;gap:6px">';
+        h+='<button class="btn sm" onclick="openAgreement(\''+c.id+'\',\''+a.id+'\')">Open</button>';
+        h+='<button class="btn sm danger" onclick="deleteAgreement(\''+c.id+'\',\''+a.id+'\')">Delete</button>';
+        h+='</span></div>';
+      });
+      h+='</div>';
+    } else {
+      h+='<p class="hint" style="margin:8px 0 0">Nothing filed yet for this client.</p>';
+    }
+    h+='<div style="margin-top:10px"><button class="btn sm danger" onclick="deleteClient(\''+c.id+'\')">Remove client</button></div>';
+    h+='</div>';
+  });
+  el.innerHTML=h;
+}
+function clientById(cid){ for(var i=0;i<clients.length;i++) if(clients[i].id===cid) return clients[i]; return null; }
+function openAgreement(cid,aid){
+  var c=clientById(cid); if(!c) return;
+  var a=null; for(var i=0;i<c.agreements.length;i++) if(c.agreements[i].id===aid){ a=c.agreements[i]; break; }
+  if(!a) return;
+  if(draft && !confirm("Open this saved agreement? Your current working agreement will be replaced (save it to a client file first if you want to keep it).")) return;
+  draft=cp(a.draft);
+  saveDraft();
+  showView('new');
+}
+function deleteAgreement(cid,aid){
+  var c=clientById(cid); if(!c) return;
+  if(!confirm("Delete this saved agreement from the client’s file?")) return;
+  c.agreements=c.agreements.filter(function(a){return a.id!==aid;});
+  saveClients(); renderClients();
+}
+function deleteClient(cid){
+  var c=clientById(cid); if(!c) return;
+  if(!confirm('Remove "'+c.business+'" and everything filed under them?')) return;
+  clients=clients.filter(function(x){return x.id!==cid;});
+  saveClients(); renderClients();
 }
 function doPrint(){
   if(!draft){ alert("Choose a service and fill in the agreement first."); return; }
+  fileCurrentDraft("final", true);   /* a copy of every exported agreement lands in the client's file */
   var nm=(draft.client.business||"Client").replace(/[\\/:*?"<>|]/g,"");
   var fname=nm+" - "+(draft.docTitle||"Agreement");
   if(isNative()&&window.tcoNative.savePdf){
@@ -1825,7 +1954,7 @@ function doPrint(){
 }
 
 /* boot */
-loadState(); loadDraft();
+loadState(); loadDraft(); loadClients();
 applyBrand();
 renderForm(); renderPreview();
 pingHelper(true);
