@@ -2,7 +2,6 @@ import UIKit
 import WebKit
 import Speech
 import AVFoundation
-import PDFKit
 
 /* Native shell around index.html (copied into Resources/ at build time —
    the HTML file is the app, same as the browser and desktop versions).
@@ -37,12 +36,17 @@ class ViewController: UIViewController, WKUIDelegate, WKNavigationDelegate, WKSc
     webView.scrollView.alwaysBounceHorizontal = false
     webView.scrollView.showsHorizontalScrollIndicator = false
     view.addSubview(webView)
+    let trail = webView.trailingAnchor.constraint(equalTo: view.trailingAnchor)
+    let bottom = webView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
     NSLayoutConstraint.activate([
       webView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
       webView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-      webView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-      webView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+      trail, bottom,
     ])
+    trailingC = trail
+    bottomC = bottom
+    widthC = webView.widthAnchor.constraint(equalToConstant: 816)
+    heightC = webView.heightAnchor.constraint(equalToConstant: 1056)
 
     if let url = Bundle.main.url(forResource: "index", withExtension: "html") {
       webView.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
@@ -51,12 +55,17 @@ class ViewController: UIViewController, WKUIDelegate, WKNavigationDelegate, WKSc
 
   override var preferredStatusBarStyle: UIStatusBarStyle { .lightContent }
 
-  // MARK: window.print() -> capture the app's own laid-out pages into a PDF
-  // and open the share sheet. The page enters "pdfmode" (only the page stack
-  // visible, exact letter-size pages), the whole stack is rendered once with
-  // WKWebView.createPDF, then sliced into one PDF page per sheet — so the
-  // PDF is pixel-identical to the preview: full-bleed bands, no engine
-  // margins, no clipping.
+  // MARK: window.print() -> photograph each laid-out page and compose the
+  // PDF ourselves. The web view is temporarily resized to exactly one sheet
+  // (816x1056), each page is scrolled into view and snapshotted at 2x, and
+  // the snapshots are drawn full-bleed onto US-letter PDF pages — so the PDF
+  // matches the preview by construction: no engine margins, no font
+  // re-scaling, true edge-to-edge bands.
+
+  private var trailingC: NSLayoutConstraint?
+  private var bottomC: NSLayoutConstraint?
+  private var widthC: NSLayoutConstraint?
+  private var heightC: NSLayoutConstraint?
 
   func userContentController(_ userContentController: WKUserContentController,
                              didReceive message: WKScriptMessage) {
@@ -67,52 +76,64 @@ class ViewController: UIViewController, WKUIDelegate, WKNavigationDelegate, WKSc
   }
 
   private func exportPagesPDF() {
-    // scale the page stack to exactly the window width during capture, so the
-    // captured area and the sheets are the same width -> true edge-to-edge
     let prep = "(function(){var n=document.querySelectorAll('.doc.page').length;" +
                "if(n>0){document.body.classList.add('pdfmode');" +
-               "document.querySelector('.pages').style.zoom=(window.innerWidth/816);" +
+               "var pg=document.querySelector('.pages'); if(pg) pg.style.zoom='';" +
                "window.scrollTo(0,0);}return n;})()"
     webView.evaluateJavaScript(prep) { res, _ in
       let n = (res as? NSNumber)?.intValue ?? 0
       guard n > 0 else { return }
-      // give layout a beat to settle in pdfmode before capturing
+      // size the web view to exactly one sheet
+      self.trailingC?.isActive = false
+      self.bottomC?.isActive = false
+      self.widthC?.isActive = true
+      self.heightC?.isActive = true
+      self.view.layoutIfNeeded()
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+        self.snapshotPage(0, of: n, collected: [])
+      }
+    }
+  }
+
+  private func snapshotPage(_ i: Int, of n: Int, collected: [Data]) {
+    if i >= n { finishExport(collected); return }
+    webView.evaluateJavaScript("window.scrollTo(0, \(i * 1056));") { _, _ in
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-        // note: the intermediate capture is one tall page (n x 1056pt);
-        // PDF caps a page at 14400pt, so this supports up to 13 sheets —
-        // beyond any agreement produced today
-        self.webView.createPDF(configuration: WKPDFConfiguration()) { result in
-          self.leavePDFMode()
-          switch result {
-          case .success(let data): self.sliceAndShare(data: data, pageCount: n)
-          case .failure: break
-          }
+        let cfg = WKSnapshotConfiguration()
+        cfg.rect = CGRect(x: 0, y: 0, width: 816, height: 1056)
+        cfg.afterScreenUpdates = true
+        cfg.snapshotWidth = 1632   // 2x for crisp text in the PDF
+        self.webView.takeSnapshot(with: cfg) { image, _ in
+          var arr = collected
+          if let jpg = image?.jpegData(compressionQuality: 0.88) { arr.append(jpg) }
+          self.snapshotPage(i + 1, of: n, collected: arr)
         }
       }
     }
   }
 
-  private func leavePDFMode() {
+  private func restoreLayout() {
+    widthC?.isActive = false
+    heightC?.isActive = false
+    trailingC?.isActive = true
+    bottomC?.isActive = true
+    view.layoutIfNeeded()
     webView.evaluateJavaScript(
-      "document.body.classList.remove('pdfmode'); if (window.fitPreviewPages) fitPreviewPages();",
+      "document.body.classList.remove('pdfmode'); window.scrollTo(0,0); if (window.fitPreviewPages) fitPreviewPages();",
       completionHandler: nil)
   }
 
-  private func sliceAndShare(data: Data, pageCount: Int) {
-    guard let src = PDFDocument(data: data), let big = src.page(at: 0), pageCount > 0 else { return }
-    let media = big.bounds(for: .mediaBox)
-    let pageH = media.height / CGFloat(pageCount)
-    let out = PDFDocument()
-    for i in 0..<pageCount {
-      guard let slice = big.copy() as? PDFPage else { continue }
-      let box = CGRect(x: media.minX,
-                       y: media.minY + media.height - CGFloat(i + 1) * pageH,
-                       width: media.width, height: pageH)
-      slice.setBounds(box, for: .mediaBox)
-      slice.setBounds(box, for: .cropBox)
-      out.insert(slice, at: out.pageCount)
+  private func finishExport(_ pages: [Data]) {
+    restoreLayout()
+    guard !pages.isEmpty else { return }
+    let sheet = CGRect(x: 0, y: 0, width: 612, height: 792)   // US letter in points
+    let renderer = UIGraphicsPDFRenderer(bounds: sheet)
+    let pdf = renderer.pdfData { ctx in
+      for d in pages {
+        ctx.beginPage()
+        UIImage(data: d)?.draw(in: sheet)
+      }
     }
-    guard out.pageCount > 0, let pdf = out.dataRepresentation() else { return }
     let raw = (webView.title?.isEmpty == false ? webView.title! : "TCO Agreement")
     let name = raw.components(separatedBy: CharacterSet(charactersIn: "/\\:*?\"<>|")).joined()
     let url = FileManager.default.temporaryDirectory.appendingPathComponent(name + ".pdf")
