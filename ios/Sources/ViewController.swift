@@ -35,6 +35,7 @@ class ViewController: UIViewController, WKUIDelegate, WKNavigationDelegate, WKSc
     webView.scrollView.alwaysBounceVertical = false
     webView.scrollView.alwaysBounceHorizontal = false
     webView.scrollView.showsHorizontalScrollIndicator = false
+    webView.scrollView.contentInsetAdjustmentBehavior = .never
     view.addSubview(webView)
     let trail = webView.trailingAnchor.constraint(equalTo: view.trailingAnchor)
     let bottom = webView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
@@ -83,13 +84,14 @@ class ViewController: UIViewController, WKUIDelegate, WKNavigationDelegate, WKSc
     webView.evaluateJavaScript(prep) { res, _ in
       let n = (res as? NSNumber)?.intValue ?? 0
       guard n > 0 else { return }
-      // size the web view to exactly one sheet
+      // size the web view to exactly one sheet; with inset adjustment
+      // disabled, scroll positions map 1:1 to page positions
       self.trailingC?.isActive = false
       self.bottomC?.isActive = false
       self.widthC?.isActive = true
       self.heightC?.isActive = true
       self.view.layoutIfNeeded()
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
         self.snapshotPage(0, of: n, collected: [])
       }
     }
@@ -97,17 +99,18 @@ class ViewController: UIViewController, WKUIDelegate, WKNavigationDelegate, WKSc
 
   private func snapshotPage(_ i: Int, of n: Int, collected: [Data]) {
     if i >= n { finishExport(collected); return }
-    webView.evaluateJavaScript("window.scrollTo(0, \(i * 1056));") { _, _ in
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-        let cfg = WKSnapshotConfiguration()
-        cfg.rect = CGRect(x: 0, y: 0, width: 816, height: 1056)
-        cfg.afterScreenUpdates = true
-        cfg.snapshotWidth = 1632   // 2x for crisp text in the PDF
-        self.webView.takeSnapshot(with: cfg) { image, _ in
-          var arr = collected
-          if let jpg = image?.jpegData(compressionQuality: 0.88) { arr.append(jpg) }
-          self.snapshotPage(i + 1, of: n, collected: arr)
-        }
+    // position page i at the top of the viewport via the scroll view directly
+    // (setContentOffset, not JS scrolling, so nothing can reinterpret it)
+    webView.scrollView.setContentOffset(CGPoint(x: 0, y: CGFloat(i) * 1056), animated: false)
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+      let cfg = WKSnapshotConfiguration()
+      cfg.rect = CGRect(x: 0, y: 0, width: 816, height: 1056)
+      cfg.afterScreenUpdates = true
+      cfg.snapshotWidth = 1632   // 2x for crisp text in the PDF
+      self.webView.takeSnapshot(with: cfg) { image, _ in
+        var arr = collected
+        if let jpg = image?.jpegData(compressionQuality: 0.88) { arr.append(jpg) }
+        self.snapshotPage(i + 1, of: n, collected: arr)
       }
     }
   }
