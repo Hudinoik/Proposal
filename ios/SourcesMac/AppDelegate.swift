@@ -14,6 +14,24 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKUIDelegate, WKNavigationDe
   var window: NSWindow!
   var webView: WKWebView!
 
+  /* AppKit does not attach the delegate automatically (unlike UIKit) — wire
+     it up explicitly, or the app launches with no window at all */
+  private static var sharedDelegate: AppDelegate?
+  static func main() {
+    let app = NSApplication.shared
+    let delegate = AppDelegate()
+    sharedDelegate = delegate            // app.delegate is weak; keep it alive
+    app.delegate = delegate
+    app.setActivationPolicy(.regular)
+    app.run()
+  }
+
+  /* clicking the Dock icon re-shows the window */
+  func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+    if !flag { window?.makeKeyAndOrderFront(nil) }
+    return true
+  }
+
   func applicationDidFinishLaunching(_ notification: Notification) {
     buildMenu()
 
